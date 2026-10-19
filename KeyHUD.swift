@@ -1703,10 +1703,33 @@ class KeybindingEditorWindowController: NSWindowController {
     }
 }
 
+// MARK: - Permissions Checker
+
+class PermissionChecker: ObservableObject {
+    static let shared = PermissionChecker()
+    @Published var isAccessibilityGranted: Bool = AXIsProcessTrusted()
+    private var timer: Timer?
+
+    init() {
+        refresh()
+        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            self?.refresh()
+        }
+    }
+
+    func refresh() {
+        let current = AXIsProcessTrusted()
+        if isAccessibilityGranted != current {
+            isAccessibilityGranted = current
+        }
+    }
+}
+
 // MARK: - Native Mac Settings View
 
 struct SettingsView: View {
     @ObservedObject var settings = AppSettings.shared
+    @ObservedObject var perm = PermissionChecker.shared
     var onClose: () -> Void
 
     var body: some View {
@@ -1722,33 +1745,76 @@ struct SettingsView: View {
                 Spacer()
             }
 
-            if !AXIsProcessTrusted() {
+            // System Permissions Section
+            VStack(alignment: .leading, spacing: 10) {
+                Text("SYSTEM PERMISSIONS")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.secondary)
+
                 HStack(spacing: 12) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 20))
-                        .foregroundColor(.orange)
+                    if perm.isAccessibilityGranted {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 22))
+                            .foregroundColor(.green)
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Accessibility Permission Required")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundColor(.primary)
-                        Text("KeyHUD needs Accessibility permission to auto-detect shortcuts from Chrome and native apps. Please toggle KeyHUD ON in System Settings.")
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondary)
-                    }
+                        VStack(alignment: .leading, spacing: 3) {
+                            HStack(spacing: 6) {
+                                Text("Accessibility Access")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundColor(.primary)
+                                Text("Granted")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(.green)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.green.opacity(0.16))
+                                    .cornerRadius(4)
+                            }
+                            Text("KeyHUD is authorized to auto-detect shortcuts from Chrome, Safari, and other Mac apps, and execute click actions.")
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                        }
 
-                    Spacer()
+                        Spacer()
+                    } else {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 22))
+                            .foregroundColor(.orange)
 
-                    Button("Open Privacy Settings") {
-                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
-                            NSWorkspace.shared.open(url)
+                        VStack(alignment: .leading, spacing: 3) {
+                            HStack(spacing: 6) {
+                                Text("Accessibility Access")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundColor(.primary)
+                                Text("Permission Required")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(.orange)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.orange.opacity(0.16))
+                                    .cornerRadius(4)
+                            }
+                            Text("Required to auto-detect shortcuts from native apps like Chrome. Toggle KeyHUD ON in System Settings.")
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                        }
+
+                        Spacer()
+
+                        Button("Open System Settings") {
+                            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                                NSWorkspace.shared.open(url)
+                            }
                         }
                     }
                 }
                 .padding(12)
-                .background(Color.orange.opacity(0.14))
+                .background(perm.isAccessibilityGranted ? Color.green.opacity(0.08) : Color.orange.opacity(0.12))
                 .cornerRadius(8)
             }
+            .padding(14)
+            .background(Color(NSColor.controlBackgroundColor))
+            .cornerRadius(8)
 
             // Accent Theme Section
             VStack(alignment: .leading, spacing: 10) {
