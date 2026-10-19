@@ -46,6 +46,7 @@ enum TriggerType: Int, CaseIterable, Identifiable {
     case tripleTap = 1
     case singleHold = 2
     case doubleTap = 3
+    case hotkeyOnly = 4
 
     var id: Int { rawValue }
 
@@ -53,8 +54,9 @@ enum TriggerType: Int, CaseIterable, Identifiable {
         switch self {
         case .doubleTapAndHold: return "Double-Tap ⌘ and Hold (Recommended)"
         case .tripleTap: return "Triple-Tap ⌘"
-        case .singleHold: return "Hold ⌘ (0.35s)"
+        case .singleHold: return "Hold ⌘"
         case .doubleTap: return "Double-Tap ⌘"
+        case .hotkeyOnly: return "Shortcut Only (⌘⇧/)"
         }
     }
 
@@ -64,6 +66,7 @@ enum TriggerType: Int, CaseIterable, Identifiable {
         case .tripleTap: return "Triple-Tap ⌘"
         case .singleHold: return "Hold ⌘"
         case .doubleTap: return "Double-Tap ⌘"
+        case .hotkeyOnly: return "⌘⇧/ Only"
         }
     }
 }
@@ -89,6 +92,11 @@ class AppSettings: ObservableObject {
             AppDelegate.shared?.updateToggleMenuItemTitle()
         }
     }
+    @Published var holdDuration: Double {
+        didSet {
+            UserDefaults.standard.set(holdDuration, forKey: "holdDuration")
+        }
+    }
     @Published var accentTheme: String {
         didSet {
             UserDefaults.standard.set(accentTheme, forKey: "accentTheme")
@@ -112,7 +120,10 @@ class AppSettings: ObservableObject {
         self.heightPercent = (savedH >= 20 && savedH <= 100) ? savedH : 65.0
 
         let savedTrigger = UserDefaults.standard.integer(forKey: "triggerType")
-        self.triggerType = (savedTrigger >= 0 && savedTrigger <= 3) ? savedTrigger : 0
+        self.triggerType = (savedTrigger >= 0 && savedTrigger <= 4) ? savedTrigger : 0
+
+        let savedHold = UserDefaults.standard.double(forKey: "holdDuration")
+        self.holdDuration = (savedHold >= 0.15 && savedHold <= 1.0) ? savedHold : 0.35
 
         let savedTheme = UserDefaults.standard.string(forKey: "accentTheme")
         self.accentTheme = (savedTheme != nil && AccentTheme(rawValue: savedTheme!) != nil) ? savedTheme! : AccentTheme.cyan.rawValue
@@ -1184,6 +1195,22 @@ struct SettingsView: View {
                     }
                 }
 
+                if settings.triggerType == TriggerType.singleHold.rawValue || settings.triggerType == TriggerType.doubleTapAndHold.rawValue {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("Command Hold Delay")
+                                .font(.system(size: 13))
+                                .foregroundColor(.primary)
+                            Spacer()
+                            Text("\(Int(settings.holdDuration * 1000)) ms")
+                                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                                .foregroundColor(settings.currentAccentColor)
+                        }
+                        Slider(value: $settings.holdDuration, in: 0.15...0.80, step: 0.05)
+                    }
+                    .padding(.top, 2)
+                }
+
                 Divider()
                     .padding(.vertical, 2)
 
@@ -1239,6 +1266,7 @@ struct SettingsView: View {
                     settings.widthPercent = 75
                     settings.heightPercent = 65
                     settings.triggerType = 0
+                    settings.holdDuration = 0.35
                     settings.accentTheme = AccentTheme.cyan.rawValue
                     settings.isPinned = false
                     HUDWindowController.shared.applyScreenPercentageFrame()
@@ -1264,7 +1292,7 @@ class SettingsWindowController: NSWindowController {
 
     init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 460, height: 600),
+            contentRect: NSRect(x: 0, y: 0, width: 460, height: 650),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -1358,6 +1386,7 @@ class HotKeyManager {
         lastTapTimes = lastTapTimes.filter { now.timeIntervalSince($0) < tapWindow }
 
         let trigger = TriggerType(rawValue: AppSettings.shared.triggerType) ?? .doubleTapAndHold
+        let holdSec = AppSettings.shared.holdDuration
 
         switch trigger {
         case .singleHold:
@@ -1366,7 +1395,7 @@ class HotKeyManager {
                 HUDWindowController.shared.toggle()
             }
             cmdWorkItem = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
+            DispatchQueue.main.asyncAfter(deadline: .now() + holdSec, execute: work)
 
         case .doubleTap:
             if lastTapTimes.count >= 1 {
@@ -1384,13 +1413,18 @@ class HotKeyManager {
 
         case .doubleTapAndHold:
             if lastTapTimes.count >= 1 {
+                let holdDelay = max(0.08, holdSec * 0.35)
                 let work = DispatchWorkItem { [weak self] in
                     self?.shouldIgnoreNextCmdUp = true
                     HUDWindowController.shared.toggle()
                 }
                 cmdWorkItem = work
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: work)
+                DispatchQueue.main.asyncAfter(deadline: .now() + holdDelay, execute: work)
             }
+
+        case .hotkeyOnly:
+            // Modifier hold/tap is disabled; ⌘⇧/ is monitored exclusively
+            break
         }
     }
 

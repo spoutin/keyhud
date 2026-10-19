@@ -34,7 +34,14 @@
   - [x] Clicking or pressing Enter to execute shortcuts dispatches to target app while keeping HUD open.
   - [x] Persistent Pin Mode toggle in Settings.
 
-- [ ] **Command Hold Duration Slider**
+- [x] **Command Hold Duration Slider & Trigger Sensitivity**
+  - [x] Adjustable Command hold duration slider in Settings (150ms - 800ms).
+  - [x] Shortcut-Only mode (`⌘⇧/ Only`) to disable all Command tap/hold modifier interception.
+  - [x] Real-time millisecond readout on the slider.
+
+- [ ] **Bookmarks & Favorites**
+  - [ ] Star icon next to shortcuts to mark them as favorites.
+  - [ ] Pinned "Favorites" section or top-of-column highlighting for bookmarked items.
 
 ---
 
