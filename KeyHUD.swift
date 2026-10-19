@@ -1242,14 +1242,14 @@ class HUDWindowController: NSWindowController {
     init() {
         let panel = KeyHUDPanel(
             contentRect: NSRect(x: 100, y: 100, width: 900, height: 600),
-            styleMask: [.titled, .fullSizeContentView, .resizable],
+            styleMask: [.titled, .fullSizeContentView, .resizable, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
         panel.isFloatingPanel = true
         panel.level = .floating
         panel.hidesOnDeactivate = false
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle, .transient]
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = true
@@ -1296,16 +1296,50 @@ class HUDWindowController: NSWindowController {
     }
 
     private func resolveTargetApp(_ passedApp: NSRunningApplication? = nil) -> NSRunningApplication? {
-        if let p = passedApp, p.bundleIdentifier != Bundle.main.bundleIdentifier {
+        if let p = passedApp, p.bundleIdentifier != Bundle.main.bundleIdentifier && p.bundleIdentifier != "com.apple.loginwindow" {
             return p
         }
-        if let front = NSWorkspace.shared.frontmostApplication, front.bundleIdentifier != Bundle.main.bundleIdentifier {
+
+        // 1. If AeroSpace is running, query the focused window's PID so we always match the active workspace
+        let cli = Process()
+        cli.launchPath = "/opt/homebrew/bin/aerospace"
+        cli.arguments = ["list-windows", "--focused", "--format", "%{app-pid}"]
+        let p = Pipe()
+        cli.standardOutput = p
+        if (try? cli.run()) != nil {
+            cli.waitUntilExit()
+            let out = String(data: p.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let pidStr = out, let pid = Int32(pidStr), let app = NSRunningApplication(processIdentifier: pid) {
+                if app.bundleIdentifier != Bundle.main.bundleIdentifier && app.bundleIdentifier != "com.apple.loginwindow" {
+                    return app
+                }
+            }
+        }
+
+        // 2. macOS frontmost application
+        if let front = NSWorkspace.shared.frontmostApplication,
+           front.bundleIdentifier != Bundle.main.bundleIdentifier &&
+           front.bundleIdentifier != "com.apple.loginwindow" {
             return front
         }
+
+        // 3. Menu bar owning application
+        if let menuBarApp = NSWorkspace.shared.menuBarOwningApplication,
+           menuBarApp.bundleIdentifier != Bundle.main.bundleIdentifier &&
+           menuBarApp.bundleIdentifier != "com.apple.loginwindow" {
+            return menuBarApp
+        }
+
+        // 4. Fallback to active regular app
         return NSWorkspace.shared.runningApplications.first(where: {
-            $0.activationPolicy == .regular && $0.bundleIdentifier != Bundle.main.bundleIdentifier && $0.isActive
+            $0.activationPolicy == .regular &&
+            $0.bundleIdentifier != Bundle.main.bundleIdentifier &&
+            $0.bundleIdentifier != "com.apple.loginwindow" &&
+            $0.isActive
         }) ?? NSWorkspace.shared.runningApplications.first(where: {
-            $0.activationPolicy == .regular && $0.bundleIdentifier != Bundle.main.bundleIdentifier
+            $0.activationPolicy == .regular &&
+            $0.bundleIdentifier != Bundle.main.bundleIdentifier &&
+            $0.bundleIdentifier != "com.apple.loginwindow"
         })
     }
 
@@ -1360,9 +1394,8 @@ class HUDWindowController: NSWindowController {
 
         applyScreenPercentageFrame()
 
-        window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
-        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
 
         if let monitor = eventMonitor {
             NSEvent.removeMonitor(monitor)
@@ -1730,6 +1763,7 @@ class KeybindingEditorWindowController: NSWindowController {
             defer: false
         )
         window.title = "KeyHUD Keybinding Editor"
+        window.collectionBehavior = [.moveToActiveSpace]
         window.minSize = NSSize(width: 600, height: 440)
         window.center()
         window.isReleasedWhenClosed = false
@@ -2130,6 +2164,7 @@ class SettingsWindowController: NSWindowController {
             defer: false
         )
         window.title = "KeyHUD Settings"
+        window.collectionBehavior = [.moveToActiveSpace]
         window.minSize = NSSize(width: 520, height: 620)
         window.center()
         window.isReleasedWhenClosed = false
