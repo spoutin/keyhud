@@ -8,6 +8,11 @@
   - [x] Automatically close/hide HUD upon executing an action.
   - [x] Press `Enter` in search bar to execute the first matched shortcut immediately.
 
+- [x] **Import Keybindings & Configuration Sync**
+  - [x] Import shortcuts file via native open dialog (supports both KeyHUD `.json` and KeyClu `.keyclu` formats).
+  - [x] Auto-Detect local configurations: parses `~/.config/herdr/config.toml`, `~/.config/zsh/`, and `~/.config/nvim/lua/config/keymaps.lua` and syncs them automatically into `custom_shortcuts.json`.
+  - [x] Menu bar items and Settings buttons for Import and Auto-Detect.
+
 - [ ] **Keyboard Navigation in Search**
   - [ ] Enable `Up` / `Down` arrow keys to highlight items in search results.
   - [ ] Press `Enter` to execute the selected shortcut immediately.
