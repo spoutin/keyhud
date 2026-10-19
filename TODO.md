@@ -13,9 +13,10 @@
   - [x] Auto-Detect local configurations: parses `~/.config/herdr/config.toml`, `~/.config/zsh/`, and `~/.config/nvim/lua/config/keymaps.lua` and syncs them automatically into `custom_shortcuts.json`.
   - [x] Menu bar items and Settings buttons for Import and Auto-Detect.
 
-- [ ] **Keyboard Navigation in Search**
-  - [ ] Enable `Up` / `Down` arrow keys to highlight items in search results.
-  - [ ] Press `Enter` to execute the selected shortcut immediately.
+- [x] **Keyboard Navigation in Search**
+  - [x] Enable `Up` / `Down` arrow keys to highlight items in search results.
+  - [x] Visual selection glow, border, and inverted contrast badge on active item.
+  - [x] Press `Enter` to execute the highlighted shortcut immediately.
 
 - [ ] **Visual Polish & Accent Coloring**
   - [ ] Accent color picker in Settings (Cyan, Catppuccin Blue, Mauve, Neon Green, Amber).

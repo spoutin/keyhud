@@ -469,16 +469,23 @@ class ActionExecutor {
     }
 }
 
-// MARK: - Search State
+// MARK: - Search State with Navigation Index
 
 class SearchState: ObservableObject {
-    @Published var query: String = ""
+    @Published var query: String = "" {
+        didSet {
+            selectedIndex = 0
+        }
+    }
+    @Published var selectedIndex: Int = 0
 }
 
-// MARK: - Auto-Focusing Native Search Field
+// MARK: - Auto-Focusing Native Search Field with Arrow Navigation
 
 struct SearchBarView: NSViewRepresentable {
     @Binding var text: String
+    var onMoveDown: () -> Void
+    var onMoveUp: () -> Void
     var onCommit: () -> Void
     var onEscape: () -> Void
 
@@ -493,12 +500,20 @@ struct SearchBarView: NSViewRepresentable {
         }
 
         func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
-            if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
-                parent.onEscape()
+            if commandSelector == #selector(NSResponder.moveDown(_:)) {
+                parent.onMoveDown()
+                return true
+            }
+            if commandSelector == #selector(NSResponder.moveUp(_:)) {
+                parent.onMoveUp()
                 return true
             }
             if commandSelector == #selector(NSResponder.insertNewline(_:)) {
                 parent.onCommit()
+                return true
+            }
+            if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
+                parent.onEscape()
                 return true
             }
             return false
@@ -509,7 +524,7 @@ struct SearchBarView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSTextField {
         let tf = NSTextField()
-        tf.placeholderString = "Search shortcuts... (Enter to run, Esc to close)"
+        tf.placeholderString = "Search shortcuts... (↑/↓ to navigate, Enter to run, Esc to close)"
         tf.isBordered = false
         tf.drawsBackground = false
         tf.focusRingType = .none
@@ -530,29 +545,19 @@ struct SearchBarView: NSViewRepresentable {
     }
 }
 
-// MARK: - Shortcut Row View
-
-struct ShortcutButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(configuration.isPressed ? Color.cyan.opacity(0.35) : Color.white.opacity(0.04))
-            .cornerRadius(6)
-            .contentShape(Rectangle())
-    }
-}
+// MARK: - Shortcut Row View with Selection Highlight
 
 struct ShortcutRow: View {
     let item: ShortcutItem
+    let isSelected: Bool
     let onSelect: () -> Void
 
     var body: some View {
         Button(action: onSelect) {
             HStack(alignment: .center) {
                 Text(item.title)
-                    .font(.system(size: 12))
-                    .foregroundColor(.white.opacity(0.92))
+                    .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
+                    .foregroundColor(isSelected ? .white : .white.opacity(0.88))
                     .lineLimit(1)
 
                 Spacer(minLength: 8)
@@ -561,12 +566,23 @@ struct ShortcutRow: View {
                     .font(.system(size: 11, weight: .semibold, design: .monospaced))
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(Color.white.opacity(0.16))
-                    .foregroundColor(Color.cyan)
+                    .background(isSelected ? Color.cyan : Color.white.opacity(0.16))
+                    .foregroundColor(isSelected ? .black : Color.cyan)
                     .cornerRadius(5)
             }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isSelected ? Color.cyan.opacity(0.25) : Color.white.opacity(0.04))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(isSelected ? Color.cyan.opacity(0.8) : Color.clear, lineWidth: 1.5)
+            )
+            .contentShape(Rectangle())
         }
-        .buttonStyle(ShortcutButtonStyle())
+        .buttonStyle(PlainButtonStyle())
     }
 }
 
@@ -594,10 +610,30 @@ struct HUDView: View {
         }
     }
 
-    private func executeFirstMatch() {
-        if let firstGroup = filteredGroups.first, let firstItem = firstGroup.items.first {
-            onExecute(firstItem)
+    var flatFilteredItems: [ShortcutItem] {
+        filteredGroups.flatMap { $0.items }
+    }
+
+    var currentSelectedItem: ShortcutItem? {
+        guard !flatFilteredItems.isEmpty else { return nil }
+        let idx = min(max(0, searchState.selectedIndex), flatFilteredItems.count - 1)
+        return flatFilteredItems[idx]
+    }
+
+    private func executeCurrentSelection() {
+        if let item = currentSelectedItem {
+            onExecute(item)
         }
+    }
+
+    private func moveSelectionDown() {
+        guard !flatFilteredItems.isEmpty else { return }
+        searchState.selectedIndex = min(flatFilteredItems.count - 1, searchState.selectedIndex + 1)
+    }
+
+    private func moveSelectionUp() {
+        guard !flatFilteredItems.isEmpty else { return }
+        searchState.selectedIndex = max(0, searchState.selectedIndex - 1)
     }
 
     var body: some View {
@@ -621,7 +657,9 @@ struct HUDView: View {
                         .foregroundColor(.gray)
                     SearchBarView(
                         text: $searchState.query,
-                        onCommit: executeFirstMatch,
+                        onMoveDown: moveSelectionDown,
+                        onMoveUp: moveSelectionUp,
+                        onCommit: executeCurrentSelection,
                         onEscape: onDismiss
                     )
                     .frame(height: 22)
@@ -638,7 +676,7 @@ struct HUDView: View {
                 .padding(.vertical, 5)
                 .background(Color.white.opacity(0.12))
                 .cornerRadius(8)
-                .frame(width: 360)
+                .frame(width: 400)
 
                 Button(action: onDismiss) {
                     Image(systemName: "xmark.circle.fill")
@@ -677,7 +715,8 @@ struct HUDView: View {
                                     ScrollView(.vertical, showsIndicators: true) {
                                         VStack(alignment: .leading, spacing: 4) {
                                             ForEach(group.items) { item in
-                                                ShortcutRow(item: item) {
+                                                let isSelected = (currentSelectedItem?.id == item.id)
+                                                ShortcutRow(item: item, isSelected: isSelected) {
                                                     onExecute(item)
                                                 }
                                             }
