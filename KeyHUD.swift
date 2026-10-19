@@ -357,6 +357,145 @@ class CustomShortcutsManager {
     }
 }
 
+// MARK: - Keybinding Editor State
+
+class EditorState: ObservableObject {
+    @Published var config: [String: [String: [[String: String]]]] = [:]
+    @Published var selectedBundleID: String = ""
+    @Published var isDirty: Bool = false
+    @Published var newCategoryName: String = ""
+    @Published var isAddingCategory: Bool = false
+    @Published var isAddingApp: Bool = false
+    @Published var newAppBundleID: String = ""
+
+    init() {
+        reload()
+    }
+
+    func reload(selecting targetBundleID: String? = nil) {
+        let loaded = CustomShortcutsManager.shared.loadConfig()
+        self.config = loaded
+        self.isDirty = false
+        if let target = targetBundleID, !target.isEmpty {
+            if self.config[target] == nil {
+                self.config[target] = [:]
+            }
+            self.selectedBundleID = target
+        } else if !self.selectedBundleID.isEmpty && self.config[self.selectedBundleID] != nil {
+            // retain selection
+        } else {
+            self.selectedBundleID = loaded.keys.sorted().first ?? "com.mitchellh.ghostty"
+        }
+    }
+
+    var availableApps: [String] {
+        var keys = Set(config.keys)
+        if !selectedBundleID.isEmpty {
+            keys.insert(selectedBundleID)
+        }
+        return keys.sorted()
+    }
+
+    var currentCategories: [String] {
+        guard let appDict = config[selectedBundleID] else { return [] }
+        return appDict.keys.sorted()
+    }
+
+    func shortcuts(for category: String) -> [[String: String]] {
+        return config[selectedBundleID]?[category] ?? []
+    }
+
+    func addApp(bundleID: String) {
+        let trimmed = bundleID.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        if config[trimmed] == nil {
+            config[trimmed] = [:]
+        }
+        selectedBundleID = trimmed
+        isDirty = true
+    }
+
+    func addCategory(name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, !selectedBundleID.isEmpty else { return }
+        if config[selectedBundleID] == nil {
+            config[selectedBundleID] = [:]
+        }
+        if config[selectedBundleID]?[trimmed] == nil {
+            config[selectedBundleID]?[trimmed] = [
+                ["title": "New Shortcut", "keys": ""]
+            ]
+            isDirty = true
+        }
+    }
+
+    func deleteCategory(name: String) {
+        guard !selectedBundleID.isEmpty else { return }
+        config[selectedBundleID]?.removeValue(forKey: name)
+        isDirty = true
+    }
+
+    func addShortcut(category: String) {
+        guard !selectedBundleID.isEmpty else { return }
+        if config[selectedBundleID] == nil {
+            config[selectedBundleID] = [:]
+        }
+        if config[selectedBundleID]?[category] == nil {
+            config[selectedBundleID]?[category] = []
+        }
+        config[selectedBundleID]?[category]?.append(["title": "New Shortcut", "keys": ""])
+        isDirty = true
+    }
+
+    func updateShortcut(category: String, index: Int, title: String, keys: String) {
+        guard !selectedBundleID.isEmpty,
+              var items = config[selectedBundleID]?[category],
+              index < items.count else { return }
+        items[index] = ["title": title, "keys": keys]
+        config[selectedBundleID]?[category] = items
+        isDirty = true
+    }
+
+    func deleteShortcut(category: String, index: Int) {
+        guard !selectedBundleID.isEmpty,
+              var items = config[selectedBundleID]?[category],
+              index < items.count else { return }
+        items.remove(at: index)
+        config[selectedBundleID]?[category] = items
+        isDirty = true
+    }
+
+    func insertModifier(_ mod: String, category: String, index: Int) {
+        guard !selectedBundleID.isEmpty,
+              var items = config[selectedBundleID]?[category],
+              index < items.count else { return }
+        var keys = items[index]["keys"] ?? ""
+        if mod == "Space" {
+            keys += (keys.isEmpty ? "Space" : " Space")
+        } else if mod == "Esc" {
+            keys += (keys.isEmpty ? "Esc" : " Esc")
+        } else {
+            keys += mod
+        }
+        items[index]["keys"] = keys
+        config[selectedBundleID]?[category] = items
+        isDirty = true
+    }
+
+    func save() {
+        do {
+            try CustomShortcutsManager.shared.saveConfig(config)
+            isDirty = false
+        } catch {
+            print("Error saving shortcuts config: \(error)")
+        }
+    }
+
+    func revert() {
+        reload(selecting: selectedBundleID)
+    }
+}
+
 // MARK: - Accessibility Menu Scanner
 
 class MenuScanner {
