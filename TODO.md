@@ -1,0 +1,43 @@
+# KeyHUD Roadmap & TODO
+
+## 🎯 High Priority
+
+- [ ] **Click-to-Execute Actions**
+  - [ ] For Native Mac Apps: Call `AXUIElementPerformAction(kAXPressAction)` on click to trigger the menu action in the target app.
+  - [ ] For Terminal / Custom Shortcuts: Synthesize and post `CGEvent` keystrokes to the target app (Ghostty) on click.
+  - [ ] Automatically close/hide HUD upon executing an action.
+
+- [ ] **Keyboard Navigation in Search**
+  - [ ] Enable `Up` / `Down` arrow keys to highlight items in search results.
+  - [ ] Press `Enter` to execute the selected shortcut immediately.
+
+- [ ] **Visual Polish & Accent Coloring**
+  - [ ] Accent color picker in Settings (Cyan, Catppuccin Blue, Mauve, Neon Green, Amber).
+  - [ ] Row hover glow effect (smooth mouse-over illumination).
+  - [ ] Zebra striping toggle in Settings for easier wide scanning.
+  - [ ] Contrast-styled badge pills for modifiers (`⌃`, `⌥`, `⇧`, `⌘`).
+
+---
+
+## 🚀 Medium Priority
+
+- [ ] **Command Hold Duration Slider**
+  - [ ] Add slider in Settings to adjust `Command` hold delay (e.g. 0.2s - 0.8s).
+  - [ ] Option to disable hold-to-activate and rely exclusively on the `Cmd+Shift+/` hotkey.
+
+- [ ] **Bookmarks & Favorites**
+  - [ ] Star icon next to shortcuts to mark them as favorites.
+  - [ ] Pinned "Favorites" section or top-of-column highlighting for bookmarked items.
+
+- [ ] **Persistent / Pin Mode**
+  - [ ] Pin toggle button in the header so the HUD stays floating while working (ideal for multi-monitor setups).
+
+---
+
+## 📦 Low Priority / Nice-to-Have
+
+- [ ] **Export to Markdown**
+  - [ ] Button in header to export the current cheatsheet as a formatted `.md` file in `~/Documents`.
+
+- [ ] **Launch at Login**
+  - [ ] Toggle in Settings to automatically launch KeyHUD when logging into macOS.

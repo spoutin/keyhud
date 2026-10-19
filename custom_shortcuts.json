@@ -1,0 +1,71 @@
+{
+  "com.mitchellh.ghostty": {
+    "Ghostty & Herdr": [
+      { "title": "Ghostty Command Palette", "keys": "⇧⌘P" },
+      { "title": "Split Horizontal", "keys": "⌃S -" },
+      { "title": "Split Vertical", "keys": "⌃S |" },
+      { "title": "Focus Pane Left", "keys": "⌃S h" },
+      { "title": "Focus Pane Down", "keys": "⌃S j" },
+      { "title": "Focus Pane Up", "keys": "⌃S k" },
+      { "title": "Focus Pane Right", "keys": "⌃S l" },
+      { "title": "Toggle Neovim Sidebar", "keys": "⌃S e" },
+      { "title": "Pick File from Agent Output", "keys": "⌃S o" }
+    ],
+    "Zsh & Shell": [
+      { "title": "Atuin History Search", "keys": "⌃R" },
+      { "title": "FZF File Picker", "keys": "⌃T" },
+      { "title": "FZF Directory Jump", "keys": "⌥C" },
+      { "title": "Forward Word (Ghostty)", "keys": "⌥F" },
+      { "title": "Backward Word (Ghostty)", "keys": "⌥B" },
+      { "title": "FZF-Tab Toggle Select", "keys": "⌥Space" },
+      { "title": "FZF-Tab Next / Prev Item", "keys": "Tab / ⇧Tab" },
+      { "title": "Enter Vi-Mode Normal", "keys": "Esc" },
+      { "title": "Edit Line in Neovim", "keys": "v in Normal" },
+      { "title": "Expand Alias Inline", "keys": "⌃X a" }
+    ],
+    "Neovim: Movements & Jumps": [
+      { "title": "Move Cursor Left / Down / Up / Right", "keys": "h / j / k / l" },
+      { "title": "Word Forward / Backward / End", "keys": "w / b / e" },
+      { "title": "Big-Word Forward / Backward / End", "keys": "W / B / E" },
+      { "title": "Line Start / First Non-Blank / End", "keys": "0 / ^ / $" },
+      { "title": "File Top / File Bottom", "keys": "gg / G" },
+      { "title": "Half-Page Scroll Up / Down", "keys": "⌃u / ⌃d" },
+      { "title": "Full-Page Scroll Up / Down", "keys": "⌃b / ⌃f" },
+      { "title": "Center Screen on Cursor", "keys": "zz" },
+      { "title": "Scroll Cursor to Top / Bottom", "keys": "zt / zb" },
+      { "title": "Find Char on Line Fwd / Back", "keys": "f / F" },
+      { "title": "Till Char Fwd / Back", "keys": "t / T" },
+      { "title": "Repeat Char Find / Reverse", "keys": "; / ," },
+      { "title": "Jump to Matching Bracket", "keys": "%" },
+      { "title": "Jump Backward / Forward", "keys": "⌃o / ⌃i" },
+      { "title": "Search Word Under Cursor", "keys": "* / #" }
+    ],
+    "Neovim: Windows & Splits": [
+      { "title": "Focus Left Window / Split", "keys": "⌃h" },
+      { "title": "Focus Down / Resize Height -2", "keys": "⌃j" },
+      { "title": "Focus Up / Resize Height +2", "keys": "⌃k" },
+      { "title": "Focus Right / Resize Width -2", "keys": "⌃l" },
+      { "title": "Split Window Below", "keys": "<Space>w-" },
+      { "title": "Split Window Right", "keys": "<Space>w|" },
+      { "title": "Close Current Split Window", "keys": "<Space>wd" },
+      { "title": "Previous / Next Buffer", "keys": "[b / ]b" },
+      { "title": "Close Current Buffer", "keys": "<Space>bd" },
+      { "title": "Switch Buffer", "keys": "<Space>bb" }
+    ],
+    "Neovim: Edits & Leader": [
+      { "title": "Change / Delete / Yank Word", "keys": "ciw / diw / yiw" },
+      { "title": "Change Inside Quotes / Parens", "keys": "ci\" / ci'" },
+      { "title": "Toggle Line Comment", "keys": "gcc" },
+      { "title": "Repeat Last Change", "keys": "." },
+      { "title": "Undo / Redo", "keys": "u / ⌃r" },
+      { "title": "Find Files in Project", "keys": "<Space>ff" },
+      { "title": "Live Grep Project", "keys": "<Space>/" },
+      { "title": "File Explorer Neo-tree", "keys": "<Space>e" },
+      { "title": "Go to Definition", "keys": "gd" },
+      { "title": "Hover Documentation", "keys": "K" },
+      { "title": "Code Action", "keys": "<Space>ca" },
+      { "title": "Format Document", "keys": "<Space>cf" },
+      { "title": "Rename Symbol", "keys": "<Space>cr" }
+    ]
+  }
+}
