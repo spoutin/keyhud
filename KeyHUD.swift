@@ -616,6 +616,12 @@ class MenuScanner {
         guard AXUIElementCopyAttributeValue(axApp, kAXMenuBarAttribute as CFString, &menuBarVal) == .success,
               let menuBar = menuBarVal else { return [] }
 
+        DispatchQueue.main.async {
+            if !PermissionChecker.shared.isAccessibilityGranted {
+                PermissionChecker.shared.isAccessibilityGranted = true
+            }
+        }
+
         var childrenVal: AnyObject?
         guard AXUIElementCopyAttributeValue(menuBar as! AXUIElement, kAXChildrenAttribute as CFString, &childrenVal) == .success,
               let children = childrenVal as? [AXUIElement] else { return [] }
@@ -1061,28 +1067,69 @@ struct HUDView: View {
                     HStack(alignment: .top, spacing: 16) {
                         if filteredGroups.isEmpty {
                             if !AXIsProcessTrusted() {
-                                VStack(spacing: 14) {
+                                VStack(spacing: 16) {
                                     Image(systemName: "lock.shield.fill")
-                                        .font(.system(size: 40))
+                                        .font(.system(size: 44))
                                         .foregroundColor(.orange)
 
                                     Text("Accessibility Permission Required")
-                                        .font(.system(size: 16, weight: .bold))
+                                        .font(.system(size: 18, weight: .bold))
                                         .foregroundColor(.white)
 
-                                    Text("macOS requires Accessibility permission for KeyHUD to auto-detect shortcuts from native apps like \(appName).\n\nPlease toggle KeyHUD ON in System Settings → Privacy & Security → Accessibility.")
-                                        .font(.system(size: 13))
-                                        .foregroundColor(.white.opacity(0.85))
+                                    Text("macOS requires Accessibility permission for KeyHUD to auto-detect shortcuts from native apps like \(appName).\n\nIf you already turned it ON in System Settings, click Relaunch KeyHUD below so macOS applies the permission token.")
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundColor(Color.white.opacity(0.92))
                                         .multilineTextAlignment(.center)
-                                        .frame(maxWidth: 420)
+                                        .lineSpacing(4)
+                                        .frame(maxWidth: 440)
 
-                                    Button("Open Privacy & Security Settings") {
-                                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
-                                            NSWorkspace.shared.open(url)
+                                    HStack(spacing: 12) {
+                                        Button(action: {
+                                            AppDelegate.shared?.relaunchApp()
+                                        }) {
+                                            HStack(spacing: 6) {
+                                                Image(systemName: "arrow.clockwise")
+                                                Text("Relaunch KeyHUD")
+                                            }
+                                            .font(.system(size: 13, weight: .semibold))
+                                            .foregroundColor(.black)
+                                            .padding(.horizontal, 14)
+                                            .padding(.vertical, 8)
+                                            .background(accent)
+                                            .cornerRadius(6)
                                         }
+                                        .buttonStyle(PlainButtonStyle())
+
+                                        Button(action: {
+                                            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                                                NSWorkspace.shared.open(url)
+                                            }
+                                        }) {
+                                            HStack(spacing: 6) {
+                                                Image(systemName: "gearshape")
+                                                Text("Open Privacy Settings")
+                                            }
+                                            .font(.system(size: 13, weight: .medium))
+                                            .foregroundColor(.white)
+                                            .padding(.horizontal, 14)
+                                            .padding(.vertical, 8)
+                                            .background(Color.white.opacity(0.18))
+                                            .cornerRadius(6)
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
                                     }
                                     .padding(.top, 4)
                                 }
+                                .padding(28)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 14)
+                                        .fill(Color(red: 0.16, green: 0.16, blue: 0.20))
+                                        .shadow(color: Color.black.opacity(0.5), radius: 12, x: 0, y: 6)
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 14)
+                                        .stroke(Color.white.opacity(0.22), lineWidth: 1.5)
+                                )
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                                 .padding(40)
                             } else {
@@ -1712,15 +1759,32 @@ class PermissionChecker: ObservableObject {
 
     init() {
         refresh()
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+        let t = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
             self?.refresh()
         }
+        RunLoop.main.add(t, forMode: .common)
+        self.timer = t
     }
 
     func refresh() {
-        let current = AXIsProcessTrusted()
+        var current = AXIsProcessTrusted()
+        if !current {
+            // Live probe: test whether AX can read any running app
+            let probeApp = NSWorkspace.shared.runningApplications.first(where: {
+                $0.activationPolicy == .regular && $0.bundleIdentifier != Bundle.main.bundleIdentifier
+            })
+            if let probe = probeApp {
+                let axApp = AXUIElementCreateApplication(probe.processIdentifier)
+                var mb: AnyObject?
+                if AXUIElementCopyAttributeValue(axApp, kAXMenuBarAttribute as CFString, &mb) == .success {
+                    current = true
+                }
+            }
+        }
         if isAccessibilityGranted != current {
-            isAccessibilityGranted = current
+            DispatchQueue.main.async {
+                self.isAccessibilityGranted = current
+            }
         }
     }
 }
@@ -1776,6 +1840,10 @@ struct SettingsView: View {
                         }
 
                         Spacer()
+
+                        Button("Check Status") {
+                            perm.refresh()
+                        }
                     } else {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.system(size: 22))
@@ -1794,16 +1862,22 @@ struct SettingsView: View {
                                     .background(Color.orange.opacity(0.16))
                                     .cornerRadius(4)
                             }
-                            Text("Required to auto-detect shortcuts from native apps like Chrome. Toggle KeyHUD ON in System Settings.")
+                            Text("If already toggled ON in System Settings, click Relaunch KeyHUD below so macOS applies the permission token.")
                                 .font(.system(size: 11))
                                 .foregroundColor(.secondary)
                         }
 
                         Spacer()
 
-                        Button("Open System Settings") {
-                            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
-                                NSWorkspace.shared.open(url)
+                        HStack(spacing: 8) {
+                            Button("Relaunch KeyHUD") {
+                                AppDelegate.shared?.relaunchApp()
+                            }
+
+                            Button("Open Settings") {
+                                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                                    NSWorkspace.shared.open(url)
+                                }
                             }
                         }
                     }
@@ -2035,6 +2109,9 @@ struct SettingsView: View {
         .padding(20)
         .frame(minWidth: 480, maxWidth: .infinity)
         .background(Color(NSColor.windowBackgroundColor))
+        .onAppear {
+            perm.refresh()
+        }
     }
 }
 
@@ -2216,6 +2293,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ","))
         menu.addItem(NSMenuItem(title: "Edit Keybindings...", action: #selector(openKeybindingEditor), keyEquivalent: "k"))
+        menu.addItem(NSMenuItem(title: "Relaunch KeyHUD", action: #selector(relaunchApp), keyEquivalent: "r"))
         menu.addItem(NSMenuItem(title: "Import Shortcuts File... (.json / .keyclu)", action: #selector(importFileAction), keyEquivalent: "o"))
         menu.addItem(NSMenuItem(title: "Auto-Detect from Local Configs", action: #selector(autoDetectAction), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Open Shortcuts JSON...", action: #selector(openConfig), keyEquivalent: ""))
@@ -2251,6 +2329,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc func openKeybindingEditor() {
         KeybindingEditorWindowController.shared.openEditor()
+    }
+
+    @objc func relaunchApp() {
+        let task = Process()
+        task.launchPath = "/usr/bin/open"
+        task.arguments = ["/Applications/KeyHUD.app"]
+        try? task.run()
+        NSApplication.shared.terminate(nil)
     }
 
     @objc func importFileAction() {
