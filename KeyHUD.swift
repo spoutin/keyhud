@@ -1234,6 +1234,335 @@ class HUDWindowController: NSWindowController {
     }
 }
 
+// MARK: - Keybinding Editor View & Window Controller
+
+struct KeybindingEditorView: View {
+    @ObservedObject var state: EditorState
+    @ObservedObject var settings = AppSettings.shared
+    var onClose: () -> Void
+
+    var body: some View {
+        let accent = settings.currentAccentColor
+
+        VStack(spacing: 0) {
+            // Header Bar
+            HStack(spacing: 12) {
+                Image(systemName: "keyboard.fill")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(accent)
+
+                Text("Keybinding Editor")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(.primary)
+
+                Spacer()
+
+                // App Dropdown
+                HStack(spacing: 6) {
+                    Text("App:")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.secondary)
+
+                    Picker("", selection: $state.selectedBundleID) {
+                        ForEach(state.availableApps, id: \.self) { app in
+                            Text(app).tag(app)
+                        }
+                    }
+                    .pickerStyle(MenuPickerStyle())
+                    .frame(width: 200)
+
+                    Button(action: {
+                        state.isAddingApp.toggle()
+                    }) {
+                        Image(systemName: "plus.circle")
+                            .font(.system(size: 14))
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .help("Add new application by bundle identifier")
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color(NSColor.controlBackgroundColor))
+                .cornerRadius(6)
+
+                // Actions
+                Button("Revert") {
+                    state.revert()
+                }
+                .disabled(!state.isDirty)
+
+                Button("Save Changes") {
+                    state.save()
+                }
+                .disabled(!state.isDirty)
+                .keyboardShortcut("s", modifiers: .command)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
+            .background(Color(NSColor.windowBackgroundColor))
+
+            Divider()
+
+            // Inline App Adder Banner
+            if state.isAddingApp {
+                HStack(spacing: 10) {
+                    Text("New Bundle ID:")
+                        .font(.system(size: 12, weight: .semibold))
+                    TextField("e.g. com.apple.Safari or global", text: $state.newAppBundleID)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .frame(width: 250)
+
+                    Button("Add App") {
+                        if !state.newAppBundleID.isEmpty {
+                            state.addApp(bundleID: state.newAppBundleID)
+                            state.newAppBundleID = ""
+                            state.isAddingApp = false
+                        }
+                    }
+                    Button("Cancel") {
+                        state.newAppBundleID = ""
+                        state.isAddingApp = false
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 8)
+                .background(accent.opacity(0.12))
+
+                Divider()
+            }
+
+            // Categories & Shortcuts Scroll View
+            ScrollView(.vertical, showsIndicators: true) {
+                VStack(alignment: .leading, spacing: 16) {
+                    // Category adder banner
+                    HStack {
+                        if state.isAddingCategory {
+                            HStack(spacing: 8) {
+                                TextField("Category Name (e.g. Navigation & Tabs)", text: $state.newCategoryName)
+                                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                                    .frame(width: 240)
+
+                                Button("Add") {
+                                    if !state.newCategoryName.isEmpty {
+                                        state.addCategory(name: state.newCategoryName)
+                                        state.newCategoryName = ""
+                                        state.isAddingCategory = false
+                                    }
+                                }
+                                Button("Cancel") {
+                                    state.newCategoryName = ""
+                                    state.isAddingCategory = false
+                                }
+                            }
+                        } else {
+                            Button(action: { state.isAddingCategory = true }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "plus.rectangle")
+                                    Text("Add Category")
+                                }
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(accent)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+
+                        Spacer()
+
+                        if state.isDirty {
+                            Text("Unsaved Changes")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(Color.orange)
+                        }
+                    }
+                    .padding(.top, 4)
+
+                    if state.currentCategories.isEmpty {
+                        VStack(spacing: 8) {
+                            Text("No shortcut categories configured for \(state.selectedBundleID).")
+                                .font(.system(size: 13))
+                                .foregroundColor(.secondary)
+                            Text("Click '+ Add Category' above to create custom shortcuts.")
+                                .font(.system(size: 12))
+                                .foregroundColor(.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 40)
+                    } else {
+                        ForEach(state.currentCategories, id: \.self) { category in
+                            VStack(alignment: .leading, spacing: 10) {
+                                // Category Header
+                                HStack {
+                                    Text(category.uppercased())
+                                        .font(.system(size: 11, weight: .bold))
+                                        .foregroundColor(accent)
+
+                                    Spacer()
+
+                                    Button(action: {
+                                        state.deleteCategory(name: category)
+                                    }) {
+                                        Image(systemName: "trash")
+                                            .font(.system(size: 11))
+                                            .foregroundColor(.secondary)
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                    .help("Delete Category")
+                                }
+
+                                Divider()
+
+                                // Shortcuts List
+                                let items = state.shortcuts(for: category)
+                                ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                                    let currentTitle = item["title"] ?? ""
+                                    let currentKeys = item["keys"] ?? ""
+
+                                    HStack(spacing: 8) {
+                                        TextField("Title", text: Binding(
+                                            get: { currentTitle },
+                                            set: { state.updateShortcut(category: category, index: index, title: $0, keys: currentKeys) }
+                                        ))
+                                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                                        .frame(minWidth: 160)
+
+                                        TextField("Keys", text: Binding(
+                                            get: { currentKeys },
+                                            set: { state.updateShortcut(category: category, index: index, title: currentTitle, keys: $0) }
+                                        ))
+                                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                                        .frame(width: 130)
+
+                                        // Modifier Pills
+                                        HStack(spacing: 2) {
+                                            ForEach(["⌃", "⌥", "⇧", "⌘"], id: \.self) { glyph in
+                                                Button(glyph) {
+                                                    state.insertModifier(glyph, category: category, index: index)
+                                                }
+                                                .buttonStyle(PlainButtonStyle())
+                                                .font(.system(size: 11, weight: .semibold))
+                                                .frame(width: 22, height: 20)
+                                                .background(Color(NSColor.controlBackgroundColor))
+                                                .cornerRadius(4)
+                                            }
+
+                                            Button("Space") {
+                                                state.insertModifier("Space", category: category, index: index)
+                                            }
+                                            .buttonStyle(PlainButtonStyle())
+                                            .font(.system(size: 10, weight: .medium))
+                                            .padding(.horizontal, 4)
+                                            .frame(height: 20)
+                                            .background(Color(NSColor.controlBackgroundColor))
+                                            .cornerRadius(4)
+
+                                            Button("Esc") {
+                                                state.insertModifier("Esc", category: category, index: index)
+                                            }
+                                            .buttonStyle(PlainButtonStyle())
+                                            .font(.system(size: 10, weight: .medium))
+                                            .padding(.horizontal, 4)
+                                            .frame(height: 20)
+                                            .background(Color(NSColor.controlBackgroundColor))
+                                            .cornerRadius(4)
+                                        }
+
+                                        Button(action: {
+                                            state.deleteShortcut(category: category, index: index)
+                                        }) {
+                                            Image(systemName: "xmark.circle.fill")
+                                                .foregroundColor(.gray)
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
+                                        .help("Delete Shortcut")
+                                    }
+                                }
+
+                                // Add Shortcut row button
+                                Button(action: {
+                                    state.addShortcut(category: category)
+                                }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "plus")
+                                        Text("Add Shortcut")
+                                    }
+                                    .font(.system(size: 12))
+                                    .foregroundColor(accent)
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                                .padding(.top, 4)
+                            }
+                            .padding(14)
+                            .background(Color(NSColor.controlBackgroundColor))
+                            .cornerRadius(10)
+                        }
+                    }
+                }
+                .padding(20)
+            }
+
+            Divider()
+
+            // Footer
+            HStack {
+                Text("Edits persist to ~/.config/keyhud/custom_shortcuts.json")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+
+                Spacer()
+
+                Button("Done") {
+                    if state.isDirty {
+                        state.save()
+                    }
+                    onClose()
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .background(Color(NSColor.windowBackgroundColor))
+        }
+        .frame(minWidth: 650, minHeight: 480)
+        .background(Color(NSColor.windowBackgroundColor))
+    }
+}
+
+class KeybindingEditorWindowController: NSWindowController {
+    static let shared = KeybindingEditorWindowController()
+    let editorState = EditorState()
+
+    init() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 720, height: 580),
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "KeyHUD Keybinding Editor"
+        window.minSize = NSSize(width: 600, height: 440)
+        window.center()
+        window.isReleasedWhenClosed = false
+        super.init(window: window)
+
+        let view = KeybindingEditorView(state: editorState) { [weak self] in
+            self?.close()
+        }
+        window.contentView = NSHostingView(rootView: view)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func openEditor(bundleID: String? = nil) {
+        editorState.reload(selecting: bundleID)
+        window?.center()
+        window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+}
+
 // MARK: - Native Mac Settings View
 
 struct SettingsView: View {
