@@ -106,7 +106,6 @@ class CustomShortcutsManager {
             var importedCount = 0
 
             for (bundleID, rawGroups) in rawJSON {
-                // Format A: KeyHUD format [GroupTitle: [["title": "...", "keys": "..."]]]
                 if let groupsDict = rawGroups as? [String: [[String: String]]] {
                     if currentConfig[bundleID] == nil {
                         currentConfig[bundleID] = [:]
@@ -115,9 +114,7 @@ class CustomShortcutsManager {
                         currentConfig[bundleID]?[gTitle] = items
                         importedCount += items.count
                     }
-                }
-                // Format B: KeyClu format [GroupTitle: [["Title", "modifiers", keyCode]]]
-                else if let keycluGroups = rawGroups as? [String: [[Any]]] {
+                } else if let keycluGroups = rawGroups as? [String: [[Any]]] {
                     if currentConfig[bundleID] == nil {
                         currentConfig[bundleID] = [:]
                     }
@@ -169,7 +166,7 @@ class CustomShortcutsManager {
         return (title: title, keys: keys.isEmpty ? "—" : keys)
     }
 
-    // MARK: - Auto-Detect Local Configurations (Herdr, Zsh, Neovim)
+    // MARK: - Auto-Detect Local Configurations
     func autoDetectLocalConfigs() -> Int {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         var detectedCount = 0
@@ -624,30 +621,40 @@ struct HUDView: View {
             GeometryReader { geo in
                 ScrollView(.horizontal, showsIndicators: true) {
                     HStack(alignment: .top, spacing: 16) {
-                        ForEach(filteredGroups) { group in
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text(group.title.uppercased())
-                                    .font(.system(size: 11, weight: .bold))
-                                    .foregroundColor(Color.cyan)
-                                    .padding(.bottom, 2)
+                        if filteredGroups.isEmpty {
+                            VStack(spacing: 12) {
+                                Text("No shortcuts found")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(.gray)
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .padding(40)
+                        } else {
+                            ForEach(filteredGroups) { group in
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text(group.title.uppercased())
+                                        .font(.system(size: 11, weight: .bold))
+                                        .foregroundColor(Color.cyan)
+                                        .padding(.bottom, 2)
 
-                                ScrollView(.vertical, showsIndicators: true) {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        ForEach(group.items) { item in
-                                            ShortcutRow(item: item) {
-                                                onExecute(item)
+                                    ScrollView(.vertical, showsIndicators: true) {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            ForEach(group.items) { item in
+                                                ShortcutRow(item: item) {
+                                                    onExecute(item)
+                                                }
                                             }
                                         }
+                                        .padding(.trailing, 4)
                                     }
-                                    .padding(.trailing, 4)
+                                    .frame(maxHeight: .infinity)
                                 }
+                                .frame(width: 260)
                                 .frame(maxHeight: .infinity)
+                                .padding(12)
+                                .background(Color.black.opacity(0.4))
+                                .cornerRadius(10)
                             }
-                            .frame(width: 260)
-                            .frame(maxHeight: .infinity)
-                            .padding(12)
-                            .background(Color.black.opacity(0.4))
-                            .cornerRadius(10)
                         }
                     }
                     .padding(18)
@@ -712,6 +719,8 @@ class HUDWindowController: NSWindowController {
         )
         panel.isFloatingPanel = true
         panel.level = .floating
+        panel.hidesOnDeactivate = false
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = true
@@ -745,8 +754,11 @@ class HUDWindowController: NSWindowController {
         let visible = screen.visibleFrame
         let settings = AppSettings.shared
 
-        let targetWidth = visible.width * (settings.widthPercent / 100.0)
-        let targetHeight = visible.height * (settings.heightPercent / 100.0)
+        let wPercent = max(25.0, min(100.0, settings.widthPercent))
+        let hPercent = max(25.0, min(100.0, settings.heightPercent))
+
+        let targetWidth = max(500.0, visible.width * (wPercent / 100.0))
+        let targetHeight = max(350.0, visible.height * (hPercent / 100.0))
         let originX = visible.origin.x + (visible.width - targetWidth) / 2.0
         let originY = visible.origin.y + (visible.height - targetHeight) / 2.0
 
@@ -754,30 +766,46 @@ class HUDWindowController: NSWindowController {
         window.setFrame(targetFrame, display: true, animate: false)
     }
 
+    private func resolveTargetApp(_ passedApp: NSRunningApplication? = nil) -> NSRunningApplication? {
+        if let p = passedApp, p.bundleIdentifier != Bundle.main.bundleIdentifier {
+            return p
+        }
+        if let front = NSWorkspace.shared.frontmostApplication, front.bundleIdentifier != Bundle.main.bundleIdentifier {
+            return front
+        }
+        return NSWorkspace.shared.runningApplications.first(where: {
+            $0.activationPolicy == .regular && $0.bundleIdentifier != Bundle.main.bundleIdentifier && $0.isActive
+        }) ?? NSWorkspace.shared.runningApplications.first(where: {
+            $0.activationPolicy == .regular && $0.bundleIdentifier != Bundle.main.bundleIdentifier
+        })
+    }
+
     func toggle(targetApp: NSRunningApplication? = nil) {
         guard let window = window else { return }
         if window.isVisible {
             hide()
         } else {
-            show(for: targetApp ?? NSWorkspace.shared.frontmostApplication)
+            show(for: resolveTargetApp(targetApp))
         }
     }
 
-    func show(for app: NSRunningApplication?) {
-        guard let window = window, let app = app else { return }
+    func show(for app: NSRunningApplication? = nil) {
+        guard let window = window else { return }
+        let target = resolveTargetApp(app)
+        guard let validApp = target else { return }
 
-        currentTargetApp = app
+        currentTargetApp = validApp
         searchState.query = ""
 
-        let bundleID = app.bundleIdentifier ?? ""
-        let appName = app.localizedName ?? "Application"
-        let icon = app.icon
+        let bundleID = validApp.bundleIdentifier ?? ""
+        let appName = validApp.localizedName ?? "Application"
+        let icon = validApp.icon
 
         let groups: [ShortcutGroup]
         if let customGroups = CustomShortcutsManager.shared.groups(for: bundleID) {
             groups = customGroups
         } else {
-            groups = MenuScanner.scan(app: app)
+            groups = MenuScanner.scan(app: validApp)
         }
 
         let hudView = HUDView(
@@ -798,10 +826,16 @@ class HUDWindowController: NSWindowController {
         applyScreenPercentageFrame()
 
         window.makeKeyAndOrderFront(nil)
-        NSApp.activate()
+        window.orderFrontRegardless()
+        NSApp.activate(ignoringOtherApps: true)
+
+        if let monitor = eventMonitor {
+            NSEvent.removeMonitor(monitor)
+            eventMonitor = nil
+        }
 
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            if event.keyCode == 53 {
+            if event.keyCode == 53 { // Esc
                 self?.hide()
                 return nil
             }
@@ -935,7 +969,7 @@ class SettingsWindowController: NSWindowController {
     func openSettings() {
         window?.center()
         window?.makeKeyAndOrderFront(nil)
-        NSApp.activate()
+        NSApp.activate(ignoringOtherApps: true)
     }
 }
 
@@ -943,16 +977,18 @@ class SettingsWindowController: NSWindowController {
 
 class HotKeyManager {
     static let shared = HotKeyManager()
-    private var cmdPressStartTime: Date?
-    private var timer: Timer?
+    private var cmdWorkItem: DispatchWorkItem?
 
     func start() {
+        // Monitor global modifier flags (Holding Command)
         NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
             self?.handleFlagsChanged(event)
         }
 
+        // Monitor global keyDown for Cmd + Shift + /
         NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
-            if event.keyCode == 44 && event.modifierFlags.contains(.command) && event.modifierFlags.contains(.shift) {
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            if event.keyCode == 44 && flags.contains(.command) && flags.contains(.shift) {
                 DispatchQueue.main.async {
                     HUDWindowController.shared.toggle()
                 }
@@ -961,23 +997,20 @@ class HotKeyManager {
     }
 
     private func handleFlagsChanged(_ event: NSEvent) {
-        let isCmdPressed = event.modifierFlags.contains(.command)
-        let onlyCmd = isCmdPressed && !event.modifierFlags.contains(.shift) && !event.modifierFlags.contains(.option) && !event.modifierFlags.contains(.control)
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let isOnlyCmd = flags == .command
 
-        if onlyCmd {
-            if cmdPressStartTime == nil {
-                cmdPressStartTime = Date()
-                timer?.invalidate()
-                timer = Timer.scheduledTimer(withTimeInterval: 0.35, repeats: false) { _ in
-                    DispatchQueue.main.async {
-                        HUDWindowController.shared.show(for: NSWorkspace.shared.frontmostApplication)
-                    }
+        if isOnlyCmd {
+            if cmdWorkItem == nil {
+                let work = DispatchWorkItem {
+                    HUDWindowController.shared.show()
                 }
+                cmdWorkItem = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
             }
         } else {
-            cmdPressStartTime = nil
-            timer?.invalidate()
-            timer = nil
+            cmdWorkItem?.cancel()
+            cmdWorkItem = nil
         }
     }
 }
@@ -1028,10 +1061,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [] // allows any extension or json / keyclu
+        panel.allowedContentTypes = []
         panel.message = "Select a KeyHUD .json or KeyClu .keyclu file to import"
 
-        NSApp.activate()
+        NSApp.activate(ignoringOtherApps: true)
         if panel.runModal() == .OK, let url = panel.url {
             let res = CustomShortcutsManager.shared.importFile(from: url)
             let alert = NSAlert()
