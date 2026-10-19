@@ -27,6 +27,20 @@
 
 ---
 
+## 🎯 Next Features
+
+- [ ] **Per-Application Keybinding Viewer & Editor**
+  - [ ] UI to inspect and browse all configured shortcuts grouped by application (`bundleIdentifier`).
+  - [ ] Add, edit, and delete shortcuts and categories directly within the app (stored in `custom_shortcuts.json`).
+  - [ ] Quick "Add Shortcut" action button from the HUD or Settings.
+
+- [ ] **Global Shortcuts Section (System-wide, similar to KeyClu)**
+  - [ ] Dedicated "Global" column/category visible across all applications (macOS system shortcuts: Window Tiling, Screenshots, Mission Control, Spotlight, App Switching).
+  - [ ] Customizable global shortcuts stored under a `"global"` entry in `custom_shortcuts.json`.
+  - [ ] Toggle in Settings to show or hide the Global shortcuts column.
+
+---
+
 ## 🚀 Medium Priority
 
 - [x] **Persistent / Pin Mode**

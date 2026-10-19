@@ -60,6 +60,16 @@ enum TriggerType: Int, CaseIterable, Identifiable {
         }
     }
 
+    var subtitle: String {
+        switch self {
+        case .doubleTapAndHold: return "Tap Command twice quickly and hold down on the second tap"
+        case .tripleTap: return "Tap Command three times in rapid succession"
+        case .singleHold: return "Press and hold Command key down"
+        case .doubleTap: return "Tap Command key twice in rapid succession"
+        case .hotkeyOnly: return "Exclusively use ⌘⇧/ hotkey (disables modifier tapping)"
+        }
+    }
+
     var shortBadge: String {
         switch self {
         case .doubleTapAndHold: return "Double-Tap ⌘ & Hold"
@@ -1172,22 +1182,31 @@ struct SettingsView: View {
             .cornerRadius(8)
 
             // Activation Trigger & Behavior Section
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 12) {
                 Text("ACTIVATION & BEHAVIOR")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(.secondary)
 
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 8) {
                     ForEach(TriggerType.allCases) { type in
                         Button(action: {
                             settings.triggerType = type.rawValue
                         }) {
-                            HStack(spacing: 8) {
+                            HStack(alignment: .top, spacing: 10) {
                                 Image(systemName: settings.triggerType == type.rawValue ? "largecircle.fill.circle" : "circle")
                                     .foregroundColor(settings.triggerType == type.rawValue ? settings.currentAccentColor : .secondary)
-                                Text(type.title)
-                                    .font(.system(size: 13))
-                                    .foregroundColor(.primary)
+                                    .font(.system(size: 14))
+                                    .padding(.top, 2)
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(type.title)
+                                        .font(.system(size: 13, weight: settings.triggerType == type.rawValue ? .semibold : .regular))
+                                        .foregroundColor(.primary)
+                                    Text(type.subtitle)
+                                        .font(.system(size: 11))
+                                        .foregroundColor(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
                                 Spacer()
                             }
                         }
@@ -1208,7 +1227,7 @@ struct SettingsView: View {
                         }
                         Slider(value: $settings.holdDuration, in: 0.15...0.80, step: 0.05)
                     }
-                    .padding(.top, 2)
+                    .padding(.top, 4)
                 }
 
                 Divider()
@@ -1218,13 +1237,21 @@ struct SettingsView: View {
                 Button(action: {
                     settings.isPinned.toggle()
                 }) {
-                    HStack(spacing: 8) {
+                    HStack(alignment: .top, spacing: 10) {
                         Image(systemName: settings.isPinned ? "checkmark.square.fill" : "square")
                             .foregroundColor(settings.isPinned ? settings.currentAccentColor : .secondary)
-                            .font(.system(size: 14))
-                        Text("Persistent Pin Mode (keep HUD open after running shortcuts)")
-                            .font(.system(size: 13))
-                            .foregroundColor(.primary)
+                            .font(.system(size: 15))
+                            .padding(.top, 1)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Persistent Pin Mode")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(.primary)
+                            Text("Keep the HUD floating on screen even after running shortcuts, ideal for multi-monitor setups or rapid reference.")
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                         Spacer()
                     }
                 }
@@ -1233,6 +1260,7 @@ struct SettingsView: View {
                 Text("Global shortcut ⌘⇧/ (Cmd+Shift+/) also activates KeyHUD at any time.")
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 2)
             }
             .padding(14)
@@ -1282,7 +1310,7 @@ struct SettingsView: View {
             }
         }
         .padding(20)
-        .frame(width: 460)
+        .frame(minWidth: 480, maxWidth: .infinity)
         .background(Color(NSColor.windowBackgroundColor))
     }
 }
@@ -1292,12 +1320,13 @@ class SettingsWindowController: NSWindowController {
 
     init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 460, height: 650),
-            styleMask: [.titled, .closable],
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 720),
+            styleMask: [.titled, .closable, .resizable],
             backing: .buffered,
             defer: false
         )
         window.title = "KeyHUD Settings"
+        window.minSize = NSSize(width: 480, height: 620)
         window.center()
         window.isReleasedWhenClosed = false
         super.init(window: window)
