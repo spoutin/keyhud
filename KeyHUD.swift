@@ -81,11 +81,41 @@ enum TriggerType: Int, CaseIterable, Identifiable {
     }
 }
 
+enum ColorSchemeMode: String, CaseIterable, Identifiable {
+    case automatic = "Automatic"
+    case light = "Light"
+    case dark = "Dark"
+
+    var id: String { rawValue }
+
+    var appearance: NSAppearance? {
+        switch self {
+        case .automatic: return nil
+        case .light: return NSAppearance(named: .aqua)
+        case .dark: return NSAppearance(named: .darkAqua)
+        }
+    }
+
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .automatic: return nil
+        case .light: return .light
+        case .dark: return .dark
+        }
+    }
+}
+
 // MARK: - App Settings & Preferences
 
 class AppSettings: ObservableObject {
     static let shared = AppSettings()
 
+    @Published var appearanceMode: String {
+        didSet {
+            UserDefaults.standard.set(appearanceMode, forKey: "appearanceMode")
+            updateWindowsAppearance()
+        }
+    }
     @Published var widthPercent: Double {
         didSet {
             UserDefaults.standard.set(widthPercent, forKey: "widthPercent")
@@ -117,12 +147,27 @@ class AppSettings: ObservableObject {
             UserDefaults.standard.set(isPinned, forKey: "isPinned")
         }
     }
+    @Published var selectedSettingsTab: String = SettingsTab.general.rawValue
 
     var currentAccentColor: Color {
         AccentTheme(rawValue: accentTheme)?.color ?? AccentTheme.cyan.color
     }
 
+    var currentColorMode: ColorSchemeMode {
+        ColorSchemeMode(rawValue: appearanceMode) ?? .dark
+    }
+
+    func updateWindowsAppearance() {
+        let appMode = currentColorMode.appearance
+        HUDWindowController.shared.window?.appearance = appMode
+        SettingsWindowController.shared.window?.appearance = appMode
+        KeybindingEditorWindowController.shared.window?.appearance = appMode
+    }
+
     init() {
+        let savedApp = UserDefaults.standard.string(forKey: "appearanceMode")
+        self.appearanceMode = (savedApp != nil && ColorSchemeMode(rawValue: savedApp!) != nil) ? savedApp! : ColorSchemeMode.dark.rawValue
+
         let savedW = UserDefaults.standard.double(forKey: "widthPercent")
         self.widthPercent = (savedW >= 20 && savedW <= 100) ? savedW : 75.0
 
@@ -557,6 +602,7 @@ struct MacOSGlobalShortcuts {
 // MARK: - Keybinding Editor State
 
 class EditorState: ObservableObject {
+    static let shared = EditorState()
     @Published var config: [String: [String: [[String: String]]]] = [:]
     @Published var selectedBundleID: String = "" {
         didSet {
@@ -1365,35 +1411,48 @@ struct HUDView: View {
                             if let icon = appIcon {
                                 Image(nsImage: icon)
                                     .resizable()
-                                    .frame(width: 22, height: 22)
+                                    .frame(width: 20, height: 20)
                             }
                             Text(appName)
-                                .font(.system(size: 16, weight: .bold))
+                                .font(.system(size: 15, weight: .bold))
                                 .foregroundColor(.white)
                         case .aerospace:
                             Image(systemName: "macwindow.on.rectangle")
-                                .font(.system(size: 16, weight: .bold))
+                                .font(.system(size: 15, weight: .bold))
                                 .foregroundColor(accent)
                             Text("AeroSpace Tiling")
-                                .font(.system(size: 16, weight: .bold))
+                                .font(.system(size: 15, weight: .bold))
                                 .foregroundColor(.white)
                         case .macos:
                             Image(systemName: "apple.logo")
-                                .font(.system(size: 16, weight: .bold))
+                                .font(.system(size: 15, weight: .bold))
                                 .foregroundColor(accent)
                             Text("macOS System")
-                                .font(.system(size: 16, weight: .bold))
+                                .font(.system(size: 15, weight: .bold))
                                 .foregroundColor(.white)
                         }
 
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(Color.white.opacity(0.6))
+                        // High-contrast native dropdown chevron pill
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.18))
+                                .frame(width: 18, height: 18)
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(.white)
+                        }
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.white.opacity(0.08))
-                    .cornerRadius(6)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color(red: 0.18, green: 0.18, blue: 0.22).opacity(0.95))
+                            .shadow(color: Color.black.opacity(0.3), radius: 3, x: 0, y: 1)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.white.opacity(0.32), lineWidth: 1.2)
+                    )
                 }
                 .menuStyle(BorderlessButtonMenuStyle())
 
@@ -1443,7 +1502,7 @@ struct HUDView: View {
                 // Edit Shortcuts Button
                 Button(action: {
                     HUDWindowController.shared.hide()
-                    KeybindingEditorWindowController.shared.openEditor(bundleID: bundleID)
+                    SettingsWindowController.shared.openSettings(selectingTab: .shortcuts, bundleID: bundleID)
                 }) {
                     Image(systemName: "square.and.pencil")
                         .font(.system(size: 15, weight: .semibold))
@@ -1838,6 +1897,7 @@ class HUDWindowController: NSWindowController {
         window.contentView = NSHostingView(rootView: hudView)
 
         applyScreenPercentageFrame()
+        AppSettings.shared.updateWindowsAppearance()
 
         window.orderFrontRegardless()
         window.makeKeyAndOrderFront(nil)
@@ -2271,302 +2331,83 @@ class PermissionChecker: ObservableObject {
     }
 }
 
+enum SettingsTab: String, CaseIterable, Identifiable {
+    case general = "General"
+    case appearance = "Appearance"
+    case shortcuts = "Shortcuts & Editor"
+
+    var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .general: return "gearshape"
+        case .appearance: return "paintbrush"
+        case .shortcuts: return "keyboard"
+        }
+    }
+}
+
 // MARK: - Native Mac Settings View
 
 struct SettingsView: View {
     @ObservedObject var settings = AppSettings.shared
     @ObservedObject var perm = PermissionChecker.shared
+    @ObservedObject var editorState = EditorState.shared
     var onClose: () -> Void
 
+    var selectedTab: SettingsTab {
+        SettingsTab(rawValue: settings.selectedSettingsTab) ?? .general
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            // Header
-            HStack(spacing: 8) {
-                Image(systemName: "slider.horizontal.3")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(settings.currentAccentColor)
-                Text("KeyHUD Settings")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(.primary)
+        let accent = settings.currentAccentColor
+
+        VStack(spacing: 0) {
+            // Top Tab Navigation Bar
+            HStack(spacing: 6) {
+                ForEach(SettingsTab.allCases) { tab in
+                    Button(action: {
+                        settings.selectedSettingsTab = tab.rawValue
+                    }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: tab.icon)
+                                .font(.system(size: 12, weight: selectedTab == tab ? .bold : .medium))
+                            Text(tab.rawValue)
+                                .font(.system(size: 13, weight: selectedTab == tab ? .semibold : .regular))
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 7)
+                        .foregroundColor(selectedTab == tab ? .white : .primary)
+                        .background(
+                            RoundedRectangle(cornerRadius: 7)
+                                .fill(selectedTab == tab ? accent : Color.white.opacity(0.08))
+                        )
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+
                 Spacer()
             }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 10)
+            .background(Color(NSColor.controlBackgroundColor).opacity(0.75))
 
-            // System Permissions Section
-            VStack(alignment: .leading, spacing: 10) {
-                Text("SYSTEM PERMISSIONS")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(.secondary)
+            Divider()
 
-                HStack(spacing: 12) {
-                    if perm.isAccessibilityGranted {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 22))
-                            .foregroundColor(.green)
-
-                        VStack(alignment: .leading, spacing: 3) {
-                            HStack(spacing: 6) {
-                                Text("Accessibility Access")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundColor(.primary)
-                                Text("Granted")
-                                    .font(.system(size: 11, weight: .bold))
-                                    .foregroundColor(.green)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(Color.green.opacity(0.16))
-                                    .cornerRadius(4)
-                            }
-                            Text("KeyHUD is authorized to auto-detect shortcuts from Chrome, Safari, and other Mac apps, and execute click actions.")
-                                .font(.system(size: 11))
-                                .foregroundColor(.secondary)
-                        }
-
-                        Spacer()
-
-                        Button("Check Status") {
-                            perm.refresh()
-                        }
-                    } else {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 22))
-                            .foregroundColor(.orange)
-
-                        VStack(alignment: .leading, spacing: 3) {
-                            HStack(spacing: 6) {
-                                Text("Accessibility Access")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundColor(.primary)
-                                Text("Permission Required")
-                                    .font(.system(size: 11, weight: .bold))
-                                    .foregroundColor(.orange)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(Color.orange.opacity(0.16))
-                                    .cornerRadius(4)
-                            }
-                            Text("If already toggled ON in System Settings, click Relaunch KeyHUD below so macOS applies the permission token.")
-                                .font(.system(size: 11))
-                                .foregroundColor(.secondary)
-                        }
-
-                        Spacer()
-
-                        HStack(spacing: 8) {
-                            Button("Relaunch KeyHUD") {
-                                AppDelegate.shared?.relaunchApp()
-                            }
-
-                            Button("Open Settings") {
-                                HUDWindowController.shared.hide()
-                                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
-                                    NSWorkspace.shared.open(url)
-                                }
-                            }
-                        }
-                    }
-                }
-                .padding(12)
-                .background(perm.isAccessibilityGranted ? Color.green.opacity(0.08) : Color.orange.opacity(0.12))
-                .cornerRadius(8)
-            }
-            .padding(14)
-            .background(Color(NSColor.controlBackgroundColor))
-            .cornerRadius(8)
-
-            // Accent Theme Section
-            VStack(alignment: .leading, spacing: 10) {
-                Text("ACCENT THEME")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(.secondary)
-
-                HStack(spacing: 12) {
-                    ForEach(AccentTheme.allCases) { theme in
-                        Button(action: {
-                            settings.accentTheme = theme.rawValue
-                        }) {
-                            VStack(spacing: 6) {
-                                ZStack {
-                                    Circle()
-                                        .fill(theme.color)
-                                        .frame(width: 26, height: 26)
-                                    if settings.accentTheme == theme.rawValue {
-                                        Image(systemName: "checkmark")
-                                            .font(.system(size: 12, weight: .bold))
-                                            .foregroundColor(.black)
-                                    }
-                                }
-                                Text(theme.rawValue)
-                                    .font(.system(size: 11, weight: settings.accentTheme == theme.rawValue ? .semibold : .regular))
-                                    .foregroundColor(.primary)
-                            }
-                            .padding(.vertical, 6)
-                            .padding(.horizontal, 8)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(settings.accentTheme == theme.rawValue ? theme.color.opacity(0.18) : Color.clear)
-                            )
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                    }
+            // Tab Content
+            Group {
+                switch selectedTab {
+                case .general:
+                    generalTabView
+                case .appearance:
+                    appearanceTabView
+                case .shortcuts:
+                    shortcutsEditorTabView
                 }
             }
-            .padding(14)
-            .background(Color(NSColor.controlBackgroundColor))
-            .cornerRadius(8)
+            .frame(maxHeight: .infinity)
 
-            // Window Sizing Section
-            VStack(alignment: .leading, spacing: 10) {
-                Text("WINDOW SIZE")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(.secondary)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text("Horizontal (% of screen)")
-                            .font(.system(size: 13))
-                            .foregroundColor(.primary)
-                        Spacer()
-                        Text("\(Int(settings.widthPercent))%")
-                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                            .foregroundColor(settings.currentAccentColor)
-                    }
-                    Slider(value: $settings.widthPercent, in: 25...100, step: 1)
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text("Vertical (% of screen)")
-                            .font(.system(size: 13))
-                            .foregroundColor(.primary)
-                        Spacer()
-                        Text("\(Int(settings.heightPercent))%")
-                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                            .foregroundColor(settings.currentAccentColor)
-                    }
-                    Slider(value: $settings.heightPercent, in: 25...100, step: 1)
-                }
-            }
-            .padding(14)
-            .background(Color(NSColor.controlBackgroundColor))
-            .cornerRadius(8)
-
-            // Activation Trigger & Behavior Section
-            VStack(alignment: .leading, spacing: 12) {
-                Text("ACTIVATION & BEHAVIOR")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(.secondary)
-
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(TriggerType.allCases) { type in
-                        Button(action: {
-                            settings.triggerType = type.rawValue
-                        }) {
-                            HStack(alignment: .top, spacing: 10) {
-                                Image(systemName: settings.triggerType == type.rawValue ? "largecircle.fill.circle" : "circle")
-                                    .foregroundColor(settings.triggerType == type.rawValue ? settings.currentAccentColor : .secondary)
-                                    .font(.system(size: 14))
-                                    .padding(.top, 2)
-
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(type.title)
-                                        .font(.system(size: 13, weight: settings.triggerType == type.rawValue ? .semibold : .regular))
-                                        .foregroundColor(.primary)
-                                    Text(type.subtitle)
-                                        .font(.system(size: 11))
-                                        .foregroundColor(.secondary)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                }
-                                Spacer()
-                            }
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                    }
-                }
-
-                if settings.triggerType == TriggerType.singleHold.rawValue || settings.triggerType == TriggerType.doubleTapAndHold.rawValue {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text("Command Hold Delay")
-                                .font(.system(size: 13))
-                                .foregroundColor(.primary)
-                            Spacer()
-                            Text("\(Int(settings.holdDuration * 1000)) ms")
-                                .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                                .foregroundColor(settings.currentAccentColor)
-                        }
-                        Slider(value: $settings.holdDuration, in: 0.15...0.80, step: 0.05)
-                    }
-                    .padding(.top, 4)
-                }
-
-                Divider()
-                    .padding(.vertical, 2)
-
-                // Persistent Pin Toggle
-                Button(action: {
-                    settings.isPinned.toggle()
-                }) {
-                    HStack(alignment: .top, spacing: 10) {
-                        Image(systemName: settings.isPinned ? "checkmark.square.fill" : "square")
-                            .foregroundColor(settings.isPinned ? settings.currentAccentColor : .secondary)
-                            .font(.system(size: 15))
-                            .padding(.top, 1)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Persistent Pin Mode")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundColor(.primary)
-                            Text("Keep the HUD floating on screen even after running shortcuts, ideal for multi-monitor setups or rapid reference.")
-                                .font(.system(size: 11))
-                                .foregroundColor(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        Spacer()
-                    }
-                }
-                .buttonStyle(PlainButtonStyle())
-
-                Text("Global shortcut ⌘⇧/ (Cmd+Shift+/) also activates KeyHUD at any time.")
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, 2)
-            }
-            .padding(14)
-            .background(Color(NSColor.controlBackgroundColor))
-            .cornerRadius(8)
-
-            // Shortcuts & Configs Section
-            VStack(alignment: .leading, spacing: 10) {
-                Text("SHORTCUTS & CONFIGURATIONS")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(.secondary)
-
-                HStack(spacing: 12) {
-                    Button("Manage Keybindings...") {
-                        KeybindingEditorWindowController.shared.openEditor()
-                    }
-
-                    Button("Open Shortcuts JSON...") {
-                        AppDelegate.shared?.openConfig()
-                    }
-                    Spacer()
-                }
-
-                HStack(spacing: 12) {
-                    Button("Import File (.json / .keyclu)...") {
-                        AppDelegate.shared?.promptImportFile()
-                    }
-
-                    Button("Auto-Detect Configs") {
-                        AppDelegate.shared?.autoDetectAction()
-                    }
-                    Spacer()
-                }
-            }
-            .padding(14)
-            .background(Color(NSColor.controlBackgroundColor))
-            .cornerRadius(8)
+            Divider()
 
             // Footer Actions
             HStack {
@@ -2576,6 +2417,7 @@ struct SettingsView: View {
                     settings.triggerType = 0
                     settings.holdDuration = 0.35
                     settings.accentTheme = AccentTheme.cyan.rawValue
+                    settings.appearanceMode = ColorSchemeMode.dark.rawValue
                     settings.isPinned = false
                     HUDWindowController.shared.applyScreenPercentageFrame()
                 }
@@ -2588,12 +2430,344 @@ struct SettingsView: View {
                 }
                 .keyboardShortcut(.defaultAction)
             }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 10)
+            .background(Color(NSColor.controlBackgroundColor).opacity(0.4))
         }
-        .padding(20)
-        .frame(minWidth: 480, maxWidth: .infinity)
+        .frame(minWidth: 700, minHeight: 560)
         .background(Color(NSColor.windowBackgroundColor))
         .onAppear {
             perm.refresh()
+        }
+    }
+
+    // MARK: - General Tab View
+    private var generalTabView: some View {
+        ScrollView(.vertical, showsIndicators: true) {
+            VStack(alignment: .leading, spacing: 16) {
+                // System Permissions Section
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("SYSTEM PERMISSIONS")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.secondary)
+
+                    HStack(spacing: 12) {
+                        if perm.isAccessibilityGranted {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 22))
+                                .foregroundColor(.green)
+
+                            VStack(alignment: .leading, spacing: 3) {
+                                HStack(spacing: 6) {
+                                    Text("Accessibility Access")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundColor(.primary)
+                                    Text("Granted")
+                                        .font(.system(size: 11, weight: .bold))
+                                        .foregroundColor(.green)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(Color.green.opacity(0.16))
+                                        .cornerRadius(4)
+                                }
+                                Text("KeyHUD is authorized to auto-detect shortcuts from Chrome, Safari, and other Mac apps, and execute click actions.")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.secondary)
+                            }
+
+                            Spacer()
+
+                            Button("Check Status") {
+                                perm.refresh()
+                            }
+                        } else {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 22))
+                                .foregroundColor(.orange)
+
+                            VStack(alignment: .leading, spacing: 3) {
+                                HStack(spacing: 6) {
+                                    Text("Accessibility Access")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundColor(.primary)
+                                    Text("Permission Required")
+                                        .font(.system(size: 11, weight: .bold))
+                                        .foregroundColor(.orange)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(Color.orange.opacity(0.16))
+                                        .cornerRadius(4)
+                                }
+                                Text("If already toggled ON in System Settings, click Relaunch KeyHUD below so macOS applies the permission token.")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.secondary)
+                            }
+
+                            Spacer()
+
+                            HStack(spacing: 8) {
+                                Button("Relaunch KeyHUD") {
+                                    AppDelegate.shared?.relaunchApp()
+                                }
+
+                                Button("Open Settings") {
+                                    HUDWindowController.shared.hide()
+                                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                                        NSWorkspace.shared.open(url)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .padding(12)
+                    .background(perm.isAccessibilityGranted ? Color.green.opacity(0.08) : Color.orange.opacity(0.12))
+                    .cornerRadius(8)
+                }
+                .padding(14)
+                .background(Color(NSColor.controlBackgroundColor))
+                .cornerRadius(8)
+
+                // Activation Trigger & Behavior Section
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("ACTIVATION TRIGGER")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.secondary)
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(TriggerType.allCases) { type in
+                            Button(action: {
+                                settings.triggerType = type.rawValue
+                            }) {
+                                HStack(alignment: .top, spacing: 10) {
+                                    Image(systemName: settings.triggerType == type.rawValue ? "largecircle.fill.circle" : "circle")
+                                        .foregroundColor(settings.triggerType == type.rawValue ? settings.currentAccentColor : .secondary)
+                                        .font(.system(size: 14))
+                                        .padding(.top, 2)
+
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(type.title)
+                                            .font(.system(size: 13, weight: settings.triggerType == type.rawValue ? .semibold : .regular))
+                                            .foregroundColor(.primary)
+                                        Text(type.subtitle)
+                                            .font(.system(size: 11))
+                                            .foregroundColor(.secondary)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
+                                    Spacer()
+                                }
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    }
+
+                    if settings.triggerType == TriggerType.singleHold.rawValue || settings.triggerType == TriggerType.doubleTapAndHold.rawValue {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text("Command Hold Delay")
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.primary)
+                                Spacer()
+                                Text("\(Int(settings.holdDuration * 1000)) ms")
+                                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                                    .foregroundColor(settings.currentAccentColor)
+                            }
+                            Slider(value: $settings.holdDuration, in: 0.15...0.80, step: 0.05)
+                        }
+                        .padding(.top, 4)
+                    }
+
+                    Divider()
+                        .padding(.vertical, 2)
+
+                    // Persistent Pin Toggle
+                    Button(action: {
+                        settings.isPinned.toggle()
+                    }) {
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: settings.isPinned ? "checkmark.square.fill" : "square")
+                                .foregroundColor(settings.isPinned ? settings.currentAccentColor : .secondary)
+                                .font(.system(size: 15))
+                                .padding(.top, 1)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Persistent Pin Mode")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(.primary)
+                                Text("Keep the HUD floating on screen even after running shortcuts, ideal for multi-monitor setups or rapid reference.")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer()
+                        }
+                    }
+                    .buttonStyle(PlainButtonStyle())
+
+                    Text("Global shortcut ⌘⇧/ (Cmd+Shift+/) also activates KeyHUD at any time.")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 2)
+                }
+                .padding(14)
+                .background(Color(NSColor.controlBackgroundColor))
+                .cornerRadius(8)
+            }
+            .padding(18)
+        }
+    }
+
+    // MARK: - Appearance Tab View
+    private var appearanceTabView: some View {
+        ScrollView(.vertical, showsIndicators: true) {
+            VStack(alignment: .leading, spacing: 16) {
+                // Color Scheme Mode Section
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("APPEARANCE THEME")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.secondary)
+
+                    HStack(spacing: 12) {
+                        ForEach(ColorSchemeMode.allCases) { mode in
+                            Button(action: {
+                                settings.appearanceMode = mode.rawValue
+                            }) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: mode == .automatic ? "circle.righthalf.filled" : (mode == .light ? "sun.max.fill" : "moon.fill"))
+                                        .font(.system(size: 13))
+                                    Text(mode.rawValue)
+                                        .font(.system(size: 13, weight: settings.appearanceMode == mode.rawValue ? .semibold : .regular))
+                                }
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
+                                .foregroundColor(settings.appearanceMode == mode.rawValue ? .white : .primary)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .fill(settings.appearanceMode == mode.rawValue ? settings.currentAccentColor : Color(NSColor.controlBackgroundColor))
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                                )
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    }
+                }
+                .padding(14)
+                .background(Color(NSColor.controlBackgroundColor))
+                .cornerRadius(8)
+
+                // Accent Theme Section
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("ACCENT THEME")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.secondary)
+
+                    HStack(spacing: 12) {
+                        ForEach(AccentTheme.allCases) { theme in
+                            Button(action: {
+                                settings.accentTheme = theme.rawValue
+                            }) {
+                                VStack(spacing: 6) {
+                                    ZStack {
+                                        Circle()
+                                            .fill(theme.color)
+                                            .frame(width: 26, height: 26)
+                                        if settings.accentTheme == theme.rawValue {
+                                            Image(systemName: "checkmark")
+                                                .font(.system(size: 12, weight: .bold))
+                                                .foregroundColor(.black)
+                                        }
+                                    }
+                                    Text(theme.rawValue)
+                                        .font(.system(size: 11, weight: settings.accentTheme == theme.rawValue ? .semibold : .regular))
+                                        .foregroundColor(.primary)
+                                }
+                                .padding(.vertical, 6)
+                                .padding(.horizontal, 8)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(settings.accentTheme == theme.rawValue ? theme.color.opacity(0.18) : Color.clear)
+                                )
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    }
+                }
+                .padding(14)
+                .background(Color(NSColor.controlBackgroundColor))
+                .cornerRadius(8)
+
+                // Window Sizing Section (Moved to Appearance)
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("WINDOW SIZE")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.secondary)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("Horizontal (% of screen)")
+                                .font(.system(size: 13))
+                                .foregroundColor(.primary)
+                            Spacer()
+                            Text("\(Int(settings.widthPercent))%")
+                                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                                .foregroundColor(settings.currentAccentColor)
+                        }
+                        Slider(value: $settings.widthPercent, in: 25...100, step: 1)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("Vertical (% of screen)")
+                                .font(.system(size: 13))
+                                .foregroundColor(.primary)
+                            Spacer()
+                            Text("\(Int(settings.heightPercent))%")
+                                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                                .foregroundColor(settings.currentAccentColor)
+                        }
+                        Slider(value: $settings.heightPercent, in: 25...100, step: 1)
+                    }
+                }
+                .padding(14)
+                .background(Color(NSColor.controlBackgroundColor))
+                .cornerRadius(8)
+            }
+            .padding(18)
+        }
+    }
+
+    // MARK: - Shortcuts & Editor Tab View
+    private var shortcutsEditorTabView: some View {
+        VStack(spacing: 0) {
+            // Quick Tools Bar
+            HStack(spacing: 12) {
+                Button("Open JSON Config...") {
+                    AppDelegate.shared?.openConfig()
+                }
+
+                Button("Import File (.json / .keyclu)...") {
+                    AppDelegate.shared?.promptImportFile()
+                }
+
+                Button("Auto-Detect Configs") {
+                    AppDelegate.shared?.autoDetectAction()
+                }
+
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
+
+            Divider()
+
+            // Embedded Keybinding Editor
+            KeybindingEditorView(state: editorState) {
+                // In-tab dismiss handler
+            }
         }
     }
 }
@@ -2603,14 +2777,14 @@ class SettingsWindowController: NSWindowController {
 
     init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 560, height: 740),
-            styleMask: [.titled, .closable, .resizable],
+            contentRect: NSRect(x: 0, y: 0, width: 780, height: 640),
+            styleMask: [.titled, .closable, .resizable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
-        window.title = "KeyHUD Settings"
+        window.title = "KeyHUD Settings & Keybinding Editor"
         window.collectionBehavior = [.moveToActiveSpace]
-        window.minSize = NSSize(width: 520, height: 620)
+        window.minSize = NSSize(width: 680, height: 520)
         window.center()
         window.isReleasedWhenClosed = false
         super.init(window: window)
@@ -2625,7 +2799,12 @@ class SettingsWindowController: NSWindowController {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func openSettings() {
+    func openSettings(selectingTab: SettingsTab = .general, bundleID: String? = nil) {
+        AppSettings.shared.selectedSettingsTab = selectingTab.rawValue
+        if let bid = bundleID {
+            EditorState.shared.reload(selecting: bid)
+        }
+        AppSettings.shared.updateWindowsAppearance()
         window?.center()
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -2812,7 +2991,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc func openKeybindingEditor() {
-        KeybindingEditorWindowController.shared.openEditor()
+        SettingsWindowController.shared.openSettings(selectingTab: .shortcuts)
     }
 
     @objc func relaunchApp() {
