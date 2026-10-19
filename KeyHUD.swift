@@ -4,13 +4,14 @@ import ApplicationServices
 
 // MARK: - Models
 
-struct ShortcutItem: Identifiable, Codable, Equatable {
+struct ShortcutItem: Identifiable, Equatable {
     var id = UUID()
     let title: String
     let keys: String
+    var axElement: AXUIElement? = nil
 
-    enum CodingKeys: String, CodingKey {
-        case title, keys
+    static func == (lhs: ShortcutItem, rhs: ShortcutItem) -> Bool {
+        lhs.id == rhs.id && lhs.title == rhs.title && lhs.keys == rhs.keys
     }
 }
 
@@ -119,7 +120,7 @@ class MenuScanner {
                 let modInt = (cmdModVal as? Int) ?? 0
                 let modStr = decodeModifiers(modInt)
                 let keyStr = modStr + decodeGlyph(cmd)
-                items.append(ShortcutItem(title: title, keys: keyStr))
+                items.append(ShortcutItem(title: title, keys: keyStr, axElement: item))
             }
 
             // Recurse submenus
@@ -153,6 +154,116 @@ class MenuScanner {
     }
 }
 
+// MARK: - Action Executor (Click-to-Execute)
+
+class ActionExecutor {
+    static let shared = ActionExecutor()
+
+    private let keyMap: [String: CGKeyCode] = [
+        "a": 0, "s": 1, "d": 2, "f": 3, "h": 4, "g": 5, "z": 6, "x": 7, "c": 8, "v": 9,
+        "b": 11, "q": 12, "w": 13, "e": 14, "r": 15, "y": 16, "t": 17, "1": 18, "2": 19,
+        "3": 20, "4": 21, "6": 22, "5": 23, "=": 24, "9": 25, "7": 26, "-": 27, "8": 28,
+        "0": 29, "]": 30, "o": 31, "u": 32, "[": 33, "i": 34, "p": 35, "l": 37, "j": 38,
+        "'": 39, "k": 40, ";": 41, "\\": 42, ",": 43, "/": 44, "n": 45, "m": 46, ".": 47,
+        "tab": 48, "space": 49, "`": 50, "esc": 53
+    ]
+
+    func execute(item: ShortcutItem, targetApp: NSRunningApplication?) {
+        // Hide HUD immediately
+        HUDWindowController.shared.hide()
+
+        guard let app = targetApp else { return }
+
+        // Activate the target application
+        app.activate()
+
+        // Allow app to gain active focus before executing action
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
+            if let axElement = item.axElement {
+                // Native macOS menu item
+                AXUIElementPerformAction(axElement, kAXPressAction as CFString)
+            } else {
+                // Custom terminal / shell shortcut
+                self.synthesizeKeystrokes(keys: item.keys, pid: app.processIdentifier)
+            }
+        }
+    }
+
+    private func parseChord(_ raw: String) -> (CGKeyCode, CGEventFlags)? {
+        var flags: CGEventFlags = []
+        var str = raw.trimmingCharacters(in: .whitespaces)
+
+        if str.contains("⌃") || str.contains("ctrl") {
+            flags.insert(.maskControl)
+            str = str.replacingOccurrences(of: "⌃", with: "").replacingOccurrences(of: "ctrl+", with: "")
+        }
+        if str.contains("⌥") || str.contains("alt") || str.contains("opt") {
+            flags.insert(.maskAlternate)
+            str = str.replacingOccurrences(of: "⌥", with: "").replacingOccurrences(of: "alt+", with: "")
+        }
+        if str.contains("⇧") || str.contains("shift") {
+            flags.insert(.maskShift)
+            str = str.replacingOccurrences(of: "⇧", with: "").replacingOccurrences(of: "shift+", with: "")
+        }
+        if str.contains("⌘") || str.contains("cmd") {
+            flags.insert(.maskCommand)
+            str = str.replacingOccurrences(of: "⌘", with: "").replacingOccurrences(of: "cmd+", with: "")
+        }
+
+        str = str.trimmingCharacters(in: .whitespaces).lowercased()
+        if str == "<space>" || str == "space" { return (49, flags) }
+        if str == "esc" { return (53, flags) }
+        if str == "tab" { return (48, flags) }
+        if str == "|" {
+            flags.insert(.maskShift)
+            return (42, flags)
+        }
+        if let code = keyMap[str] {
+            return (code, flags)
+        }
+        return nil
+    }
+
+    private func postKey(code: CGKeyCode, flags: CGEventFlags, pid: pid_t) {
+        let source = CGEventSource(stateID: .hidSystemState)
+        if let down = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: true),
+           let up = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: false) {
+            down.flags = flags
+            up.flags = flags
+            down.postToPid(pid)
+            up.postToPid(pid)
+        }
+    }
+
+    private func synthesizeKeystrokes(keys: String, pid: pid_t) {
+        // Break compound sequences like "⌃S -" or "<Space> w -"
+        let parts = keys.components(separatedBy: " ").filter { !$0.isEmpty && $0 != "/" }
+
+        var delay = 0.0
+        for part in parts {
+            if let (code, flags) = parseChord(part) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    self.postKey(code: code, flags: flags, pid: pid)
+                }
+                delay += 0.025
+            } else {
+                // If it's a sequence of plain letters like "ciw" or "gd"
+                for char in part {
+                    let charStr = String(char).lowercased()
+                    let isUpper = char.isUppercase
+                    if let code = keyMap[charStr] {
+                        let flags: CGEventFlags = isUpper ? [.maskShift] : []
+                        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                            self.postKey(code: code, flags: flags, pid: pid)
+                        }
+                        delay += 0.025
+                    }
+                }
+            }
+        }
+    }
+}
+
 // MARK: - Search State
 
 class SearchState: ObservableObject {
@@ -163,6 +274,7 @@ class SearchState: ObservableObject {
 
 struct SearchBarView: NSViewRepresentable {
     @Binding var text: String
+    var onCommit: () -> Void
     var onEscape: () -> Void
 
     class Coordinator: NSObject, NSTextFieldDelegate {
@@ -180,6 +292,10 @@ struct SearchBarView: NSViewRepresentable {
                 parent.onEscape()
                 return true
             }
+            if commandSelector == #selector(NSResponder.insertNewline(_:)) {
+                parent.onCommit()
+                return true
+            }
             return false
         }
     }
@@ -188,7 +304,7 @@ struct SearchBarView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSTextField {
         let tf = NSTextField()
-        tf.placeholderString = "Search shortcuts... (Esc to close)"
+        tf.placeholderString = "Search shortcuts... (Enter to run, Esc to close)"
         tf.isBordered = false
         tf.drawsBackground = false
         tf.focusRingType = .none
@@ -209,12 +325,53 @@ struct SearchBarView: NSViewRepresentable {
     }
 }
 
+// MARK: - Shortcut Row View (with Click & Press Animation)
+
+struct ShortcutButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(configuration.isPressed ? Color.cyan.opacity(0.35) : Color.white.opacity(0.04))
+            .cornerRadius(6)
+            .contentShape(Rectangle())
+    }
+}
+
+struct ShortcutRow: View {
+    let item: ShortcutItem
+    let onSelect: () -> Void
+
+    var body: some View {
+        Button(action: onSelect) {
+            HStack(alignment: .center) {
+                Text(item.title)
+                    .font(.system(size: 12))
+                    .foregroundColor(.white.opacity(0.92))
+                    .lineLimit(1)
+
+                Spacer(minLength: 8)
+
+                Text(item.keys)
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.white.opacity(0.16))
+                    .foregroundColor(Color.cyan)
+                    .cornerRadius(5)
+            }
+        }
+        .buttonStyle(ShortcutButtonStyle())
+    }
+}
+
 // MARK: - SwiftUI HUD View
 
 struct HUDView: View {
     let appName: String
     let appIcon: NSImage?
     let groups: [ShortcutGroup]
+    let onExecute: (ShortcutItem) -> Void
     let onDismiss: () -> Void
 
     @ObservedObject var searchState: SearchState
@@ -229,6 +386,12 @@ struct HUDView: View {
                 $0.title.lowercased().contains(q) || $0.keys.lowercased().contains(q)
             }
             return filteredItems.isEmpty ? nil : ShortcutGroup(title: group.title, items: filteredItems)
+        }
+    }
+
+    private func executeFirstMatch() {
+        if let firstGroup = filteredGroups.first, let firstItem = firstGroup.items.first {
+            onExecute(firstItem)
         }
     }
 
@@ -251,8 +414,12 @@ struct HUDView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "magnifyingglass")
                         .foregroundColor(.gray)
-                    SearchBarView(text: $searchState.query, onEscape: onDismiss)
-                        .frame(height: 22)
+                    SearchBarView(
+                        text: $searchState.query,
+                        onCommit: executeFirstMatch,
+                        onEscape: onDismiss
+                    )
+                    .frame(height: 22)
 
                     if !searchState.query.isEmpty {
                         Button(action: { searchState.query = "" }) {
@@ -266,7 +433,7 @@ struct HUDView: View {
                 .padding(.vertical, 5)
                 .background(Color.white.opacity(0.12))
                 .cornerRadius(8)
-                .frame(width: 320)
+                .frame(width: 360)
 
                 Button(action: onDismiss) {
                     Image(systemName: "xmark.circle.fill")
@@ -294,21 +461,10 @@ struct HUDView: View {
                                     .padding(.bottom, 2)
 
                                 ScrollView(.vertical, showsIndicators: true) {
-                                    VStack(alignment: .leading, spacing: 6) {
+                                    VStack(alignment: .leading, spacing: 4) {
                                         ForEach(group.items) { item in
-                                            HStack(alignment: .center) {
-                                                Text(item.title)
-                                                    .font(.system(size: 12))
-                                                    .foregroundColor(.white.opacity(0.92))
-                                                    .lineLimit(1)
-                                                Spacer(minLength: 8)
-                                                Text(item.keys)
-                                                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                                                    .padding(.horizontal, 6)
-                                                    .padding(.vertical, 2)
-                                                    .background(Color.white.opacity(0.16))
-                                                    .foregroundColor(.white)
-                                                    .cornerRadius(5)
+                                            ShortcutRow(item: item) {
+                                                onExecute(item)
                                             }
                                         }
                                     }
@@ -316,7 +472,7 @@ struct HUDView: View {
                                 }
                                 .frame(maxHeight: .infinity)
                             }
-                            .frame(width: 250)
+                            .frame(width: 260)
                             .frame(maxHeight: .infinity)
                             .padding(12)
                             .background(Color.black.opacity(0.4))
@@ -374,6 +530,7 @@ class HUDWindowController: NSWindowController {
     static let shared = HUDWindowController()
     private var eventMonitor: Any?
     private let searchState = SearchState()
+    private var currentTargetApp: NSRunningApplication?
 
     init() {
         let panel = KeyHUDPanel(
@@ -438,6 +595,7 @@ class HUDWindowController: NSWindowController {
     func show(for app: NSRunningApplication?) {
         guard let window = window, let app = app else { return }
 
+        currentTargetApp = app
         searchState.query = ""
 
         let bundleID = app.bundleIdentifier ?? ""
@@ -452,21 +610,28 @@ class HUDWindowController: NSWindowController {
             groups = MenuScanner.scan(app: app)
         }
 
-        let hudView = HUDView(appName: appName, appIcon: icon, groups: groups, onDismiss: { [weak self] in
-            self?.hide()
-        }, searchState: searchState)
+        let hudView = HUDView(
+            appName: appName,
+            appIcon: icon,
+            groups: groups,
+            onExecute: { [weak self] item in
+                ActionExecutor.shared.execute(item: item, targetApp: self?.currentTargetApp)
+            },
+            onDismiss: { [weak self] in
+                self?.hide()
+            },
+            searchState: searchState
+        )
 
         window.contentView = NSHostingView(rootView: hudView)
 
-        // Apply custom percent of active screen
         applyScreenPercentageFrame()
 
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
 
-        // Monitor Esc key locally to dismiss
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            if event.keyCode == 53 {
+            if event.keyCode == 53 { // Esc
                 self?.hide()
                 return nil
             }
