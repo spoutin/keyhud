@@ -29,10 +29,14 @@
 
 ## 🎯 Next Features
 
-- [ ] **Per-Application Keybinding Viewer & Editor**
-  - [ ] UI to inspect and browse all configured shortcuts grouped by application (`bundleIdentifier`).
-  - [ ] Add, edit, and delete shortcuts and categories directly within the app (stored in `custom_shortcuts.json`).
-  - [ ] Quick "Add Shortcut" action button from the HUD or Settings.
+- [x] **Per-Application Keybinding Viewer & Editor**
+  - [x] Dedicated resizable Keybinding Editor window accessible from HUD header (`square.and.pencil`), Settings (`Manage Keybindings...`), and menu bar tray.
+  - [x] App selector dropdown with ability to add new applications by bundle ID.
+  - [x] Category management: add, delete, and browse categories per application.
+  - [x] Inline shortcut editing: edit title and key combo inline with instant delete.
+  - [x] Quick-insert modifier toolbar pills (`⌃`, `⌥`, `⇧`, `⌘`, `Space`, `Esc`).
+  - [x] In-memory document staging with dirty tracking, "Save Changes", and "Revert" actions.
+  - [x] Merges custom shortcuts alongside native app menus for non-terminal Mac apps.
 
 - [ ] **Global Shortcuts Section (System-wide, similar to KeyClu)**
   - [ ] Dedicated "Global" column/category visible across all applications (macOS system shortcuts: Window Tiling, Screenshots, Mission Control, Spotlight, App Switching).
