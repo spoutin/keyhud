@@ -815,6 +815,7 @@ struct ShortcutRow: View {
 
 struct HUDView: View {
     let appName: String
+    let bundleID: String
     let appIcon: NSImage?
     let groups: [ShortcutGroup]
     let onExecute: (ShortcutItem) -> Void
@@ -960,6 +961,18 @@ struct HUDView: View {
                 }
                 .buttonStyle(PlainButtonStyle())
                 .help(settings.isPinned ? "Unpin HUD (currently stays open while running shortcuts)" : "Pin HUD (keep cheatsheet open while running shortcuts)")
+
+                // Edit Shortcuts Button
+                Button(action: {
+                    KeybindingEditorWindowController.shared.openEditor(bundleID: bundleID)
+                }) {
+                    Image(systemName: "square.and.pencil")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.gray)
+                        .padding(4)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help("Edit shortcuts for \(appName)...")
 
                 // Close Button
                 Button(action: onDismiss) {
@@ -1188,6 +1201,7 @@ class HUDWindowController: NSWindowController {
 
         let hudView = HUDView(
             appName: appName,
+            bundleID: bundleID,
             appIcon: icon,
             groups: groups,
             onExecute: { [weak self] item in
@@ -1752,6 +1766,10 @@ struct SettingsView: View {
                     .foregroundColor(.secondary)
 
                 HStack(spacing: 12) {
+                    Button("Manage Keybindings...") {
+                        KeybindingEditorWindowController.shared.openEditor()
+                    }
+
                     Button("Import File (.json / .keyclu)...") {
                         AppDelegate.shared?.promptImportFile()
                     }
@@ -1970,6 +1988,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ","))
+        menu.addItem(NSMenuItem(title: "Edit Keybindings...", action: #selector(openKeybindingEditor), keyEquivalent: "k"))
         menu.addItem(NSMenuItem(title: "Import Shortcuts File... (.json / .keyclu)", action: #selector(importFileAction), keyEquivalent: "o"))
         menu.addItem(NSMenuItem(title: "Auto-Detect from Local Configs", action: #selector(autoDetectAction), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Open Shortcuts JSON...", action: #selector(openConfig), keyEquivalent: ""))
@@ -1996,6 +2015,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc func openSettings() {
         SettingsWindowController.shared.openSettings()
+    }
+
+    @objc func openKeybindingEditor() {
+        KeybindingEditorWindowController.shared.openEditor()
     }
 
     @objc func importFileAction() {
