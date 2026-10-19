@@ -1060,13 +1060,40 @@ struct HUDView: View {
                 ScrollView(.horizontal, showsIndicators: true) {
                     HStack(alignment: .top, spacing: 16) {
                         if filteredGroups.isEmpty {
-                            VStack(spacing: 12) {
-                                Text("No shortcuts found")
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(.gray)
+                            if !AXIsProcessTrusted() {
+                                VStack(spacing: 14) {
+                                    Image(systemName: "lock.shield.fill")
+                                        .font(.system(size: 40))
+                                        .foregroundColor(.orange)
+
+                                    Text("Accessibility Permission Required")
+                                        .font(.system(size: 16, weight: .bold))
+                                        .foregroundColor(.white)
+
+                                    Text("macOS requires Accessibility permission for KeyHUD to auto-detect shortcuts from native apps like \(appName).\n\nPlease toggle KeyHUD ON in System Settings → Privacy & Security → Accessibility.")
+                                        .font(.system(size: 13))
+                                        .foregroundColor(.white.opacity(0.85))
+                                        .multilineTextAlignment(.center)
+                                        .frame(maxWidth: 420)
+
+                                    Button("Open Privacy & Security Settings") {
+                                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                                            NSWorkspace.shared.open(url)
+                                        }
+                                    }
+                                    .padding(.top, 4)
+                                }
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .padding(40)
+                            } else {
+                                VStack(spacing: 12) {
+                                    Text("No shortcuts found")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.gray)
+                                }
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .padding(40)
                             }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .padding(40)
                         } else {
                             ForEach(Array(filteredGroups.enumerated()), id: \.element.id) { groupIndex, group in
                                 VStack(alignment: .leading, spacing: 8) {
@@ -1468,16 +1495,39 @@ struct KeybindingEditorView: View {
                     .padding(.top, 4)
 
                     if state.currentCategories.isEmpty {
-                        VStack(spacing: 8) {
-                            Text("No shortcut categories configured for \(state.selectedBundleID).")
-                                .font(.system(size: 13))
-                                .foregroundColor(.secondary)
-                            Text("Click '+ Add Category' above to create custom shortcuts.")
-                                .font(.system(size: 12))
-                                .foregroundColor(.secondary)
+                        if !AXIsProcessTrusted() {
+                            VStack(spacing: 12) {
+                                Image(systemName: "lock.shield.fill")
+                                    .font(.system(size: 36))
+                                    .foregroundColor(.orange)
+                                Text("Accessibility Permission Required")
+                                    .font(.system(size: 15, weight: .bold))
+                                    .foregroundColor(.primary)
+                                Text("macOS requires Accessibility access for KeyHUD to auto-detect menus for \(state.displayName(for: state.selectedBundleID)).\n\nPlease toggle KeyHUD ON in System Settings → Privacy & Security → Accessibility.")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                                    .multilineTextAlignment(.center)
+                                    .frame(maxWidth: 420)
+                                Button("Open Privacy & Security Settings") {
+                                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                                        NSWorkspace.shared.open(url)
+                                    }
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 40)
+                        } else {
+                            VStack(spacing: 8) {
+                                Text("No shortcut categories configured for \(state.selectedBundleID).")
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.secondary)
+                                Text("Click '+ Add Category' above to create custom shortcuts.")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 40)
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 40)
                     } else {
                         ForEach(state.currentCategories, id: \.self) { category in
                             VStack(alignment: .leading, spacing: 10) {
@@ -1670,6 +1720,34 @@ struct SettingsView: View {
                     .font(.system(size: 15, weight: .bold))
                     .foregroundColor(.primary)
                 Spacer()
+            }
+
+            if !AXIsProcessTrusted() {
+                HStack(spacing: 12) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 20))
+                        .foregroundColor(.orange)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Accessibility Permission Required")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(.primary)
+                        Text("KeyHUD needs Accessibility permission to auto-detect shortcuts from Chrome and native apps. Please toggle KeyHUD ON in System Settings.")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                    }
+
+                    Spacer()
+
+                    Button("Open Privacy Settings") {
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                }
+                .padding(12)
+                .background(Color.orange.opacity(0.14))
+                .cornerRadius(8)
             }
 
             // Accent Theme Section
@@ -2079,6 +2157,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(NSMenuItem(title: "Quit KeyHUD", action: #selector(quitApp), keyEquivalent: "q"))
 
         statusItem?.menu = menu
+
+        if !AXIsProcessTrusted() {
+            let options = [kAXTrustedCheckOptionPrompt.takeRetainedValue() as String: true] as CFDictionary
+            AXIsProcessTrustedWithOptions(options)
+        }
 
         HotKeyManager.shared.start()
     }
