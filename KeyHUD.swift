@@ -935,6 +935,13 @@ class SearchState: ObservableObject {
     @Published var selectedGroupIndex: Int = 0
     @Published var selectedItemIndex: Int = 0
     @Published var hoveredItemId: UUID? = nil
+    @Published var selectedScope: HUDScope = .activeApp {
+        didSet {
+            query = ""
+            selectedGroupIndex = 0
+            selectedItemIndex = 0
+        }
+    }
 }
 
 // MARK: - Auto-Focusing Native Search Field with 2D Arrow Navigation
@@ -1161,6 +1168,30 @@ struct ShortcutRow: View {
     }
 }
 
+// MARK: - HUD Scope Enum
+
+enum HUDScope: Hashable, Identifiable {
+    case activeApp
+    case aerospace
+    case macos
+
+    var id: String {
+        switch self {
+        case .activeApp: return "activeApp"
+        case .aerospace: return "aerospace"
+        case .macos: return "macos"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .activeApp: return "Active App"
+        case .aerospace: return "AeroSpace Tiling"
+        case .macos: return "macOS System"
+        }
+    }
+}
+
 // MARK: - SwiftUI HUD View
 
 struct HUDView: View {
@@ -1174,12 +1205,23 @@ struct HUDView: View {
     @ObservedObject var searchState: SearchState
     @ObservedObject var settings = AppSettings.shared
 
+    var currentScopeGroups: [ShortcutGroup] {
+        switch searchState.selectedScope {
+        case .activeApp:
+            return groups
+        case .aerospace:
+            return AeroSpaceConfigParser.parse()
+        case .macos:
+            return MacOSGlobalShortcuts.getGroups()
+        }
+    }
+
     var filteredGroups: [ShortcutGroup] {
         let q = searchState.query.trimmingCharacters(in: .whitespaces).lowercased()
         if q.isEmpty {
-            return groups
+            return currentScopeGroups
         }
-        return groups.compactMap { group in
+        return currentScopeGroups.compactMap { group in
             let filteredItems = group.items.filter {
                 $0.title.lowercased().contains(q) || $0.keys.lowercased().contains(q)
             }
@@ -1260,14 +1302,74 @@ struct HUDView: View {
         VStack(spacing: 0) {
             // Drag Header / Search Bar
             HStack(spacing: 12) {
-                if let icon = appIcon {
-                    Image(nsImage: icon)
-                        .resizable()
-                        .frame(width: 24, height: 24)
+                // Scope Switcher Dropdown Menu
+                Menu {
+                    Button(action: {
+                        searchState.selectedScope = .activeApp
+                    }) {
+                        HStack {
+                            if let icon = appIcon {
+                                Image(nsImage: icon)
+                            }
+                            Text(appName)
+                        }
+                    }
+
+                    Button(action: {
+                        searchState.selectedScope = .aerospace
+                    }) {
+                        HStack {
+                            Image(systemName: "macwindow.on.rectangle")
+                            Text("AeroSpace Tiling")
+                        }
+                    }
+
+                    Button(action: {
+                        searchState.selectedScope = .macos
+                    }) {
+                        HStack {
+                            Image(systemName: "apple.logo")
+                            Text("macOS System")
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        switch searchState.selectedScope {
+                        case .activeApp:
+                            if let icon = appIcon {
+                                Image(nsImage: icon)
+                                    .resizable()
+                                    .frame(width: 22, height: 22)
+                            }
+                            Text(appName)
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundColor(.white)
+                        case .aerospace:
+                            Image(systemName: "macwindow.on.rectangle")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundColor(accent)
+                            Text("AeroSpace Tiling")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundColor(.white)
+                        case .macos:
+                            Image(systemName: "apple.logo")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundColor(accent)
+                            Text("macOS System")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundColor(.white)
+                        }
+
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(Color.white.opacity(0.6))
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.white.opacity(0.08))
+                    .cornerRadius(6)
                 }
-                Text(appName)
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(.white)
+                .menuStyle(BorderlessButtonMenuStyle())
 
                 Spacer()
 
