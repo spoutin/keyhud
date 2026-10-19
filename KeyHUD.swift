@@ -1085,6 +1085,7 @@ struct HUDView: View {
 
                                 HStack(spacing: 12) {
                                     Button(action: {
+                                        HUDWindowController.shared.hide()
                                         AppDelegate.shared?.relaunchApp()
                                     }) {
                                         HStack(spacing: 6) {
@@ -1101,6 +1102,7 @@ struct HUDView: View {
                                     .buttonStyle(PlainButtonStyle())
 
                                     Button(action: {
+                                        HUDWindowController.shared.hide()
                                         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
                                             NSWorkspace.shared.open(url)
                                         }
@@ -1876,6 +1878,7 @@ struct SettingsView: View {
                             }
 
                             Button("Open Settings") {
+                                HUDWindowController.shared.hide()
                                 if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
                                     NSWorkspace.shared.open(url)
                                 }

@@ -42,7 +42,7 @@ cat << 'EOF' > "$APP_DIR/Contents/Info.plist"
 </plist>
 EOF
 
-echo "==> Ad-hoc signing KeyHUD..."
-codesign --force --deep --sign - "$APP_DIR"
+echo "==> Ad-hoc signing KeyHUD with stable designated requirement..."
+codesign --force --deep -s - -r '=designated => identifier "com.ablack.KeyHUD"' "$APP_DIR"
 
 echo "==> Done! KeyHUD installed to $APP_DIR."
