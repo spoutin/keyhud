@@ -835,6 +835,95 @@ struct SearchBarView: NSViewRepresentable {
     }
 }
 
+// MARK: - Key Token Parsing, Styling & Modifier Legend
+
+struct KeyToken {
+    let text: String
+    let color: Color
+    let isSpecial: Bool
+}
+
+struct KeyTokenParser {
+    static let specialSymbols: Set<Character> = ["⌘", "⇧", "⌥", "⌃", "⎋", "⇥", "↩", "⌫", "␣", "←", "→", "↑", "↓", "⇪", "⏏"]
+
+    static func parse(_ keys: String) -> [KeyToken] {
+        var tokens: [String] = []
+        var idx = keys.startIndex
+
+        while idx < keys.endIndex {
+            let ch = keys[idx]
+            if ch == " " {
+                idx = keys.index(after: idx)
+                continue
+            }
+            if specialSymbols.contains(ch) {
+                tokens.append(String(ch))
+                idx = keys.index(after: idx)
+            } else {
+                var word = ""
+                while idx < keys.endIndex && !specialSymbols.contains(keys[idx]) && keys[idx] != " " {
+                    word.append(keys[idx])
+                    idx = keys.index(after: idx)
+                }
+                if !word.isEmpty {
+                    tokens.append(word)
+                }
+            }
+        }
+
+        return tokens.map { token in
+            let (color, isSpecial) = styleForToken(token)
+            return KeyToken(text: token, color: color, isSpecial: isSpecial)
+        }
+    }
+
+    static func styleForToken(_ token: String) -> (color: Color, isSpecial: Bool) {
+        let lower = token.lowercased()
+        switch lower {
+        case "⌘", "cmd", "command":
+            return (Color(red: 0.35, green: 0.65, blue: 1.0), true)       // Vibrant Blue
+        case "⌥", "opt", "option", "alt":
+            return (Color(red: 1.0, green: 0.62, blue: 0.20), true)      // Warm Orange
+        case "⌃", "ctrl", "control":
+            return (Color(red: 0.78, green: 0.48, blue: 1.0), true)       // Purple / Mauve
+        case "⇧", "shift":
+            return (Color(red: 0.30, green: 0.86, blue: 0.55), true)      // Emerald Green
+        case "⎋", "esc", "escape":
+            return (Color(red: 1.0, green: 0.38, blue: 0.45), true)       // Coral / Rose
+        case "␣", "space":
+            return (Color(red: 0.28, green: 0.82, blue: 0.90), true)      // Cyan / Teal
+        case "⇥", "tab":
+            return (Color(red: 0.96, green: 0.82, blue: 0.30), true)      // Amber Gold
+        case "↩", "enter", "return":
+            return (Color(red: 0.45, green: 0.76, blue: 0.98), true)      // Sky Blue
+        case "⌫", "delete", "backspace":
+            return (Color(red: 0.95, green: 0.42, blue: 0.42), true)      // Salmon Red
+        case "←", "→", "↑", "↓", "left", "right", "up", "down":
+            return (Color(red: 0.88, green: 0.88, blue: 0.92), true)      // Crisp White-Silver
+        default:
+            return (Color.white.opacity(0.92), false)                      // Standard key letter/digit
+        }
+    }
+}
+
+struct ModifierLegendItem: Identifiable {
+    let id = UUID()
+    let symbol: String
+    let name: String
+    let color: Color
+}
+
+let modifierLegendItems: [ModifierLegendItem] = [
+    ModifierLegendItem(symbol: "⌘", name: "Command", color: Color(red: 0.35, green: 0.65, blue: 1.0)),
+    ModifierLegendItem(symbol: "⇧", name: "Shift", color: Color(red: 0.30, green: 0.86, blue: 0.55)),
+    ModifierLegendItem(symbol: "⌥", name: "Option", color: Color(red: 1.0, green: 0.62, blue: 0.20)),
+    ModifierLegendItem(symbol: "⌃", name: "Control", color: Color(red: 0.78, green: 0.48, blue: 1.0)),
+    ModifierLegendItem(symbol: "⎋", name: "Esc", color: Color(red: 1.0, green: 0.38, blue: 0.45)),
+    ModifierLegendItem(symbol: "␣", name: "Space", color: Color(red: 0.28, green: 0.82, blue: 0.90)),
+    ModifierLegendItem(symbol: "⇥", name: "Tab", color: Color(red: 0.96, green: 0.82, blue: 0.30)),
+    ModifierLegendItem(symbol: "↩", name: "Return", color: Color(red: 0.45, green: 0.76, blue: 0.98))
+]
+
 // MARK: - Shortcut Row View with Theme & Hover Polish
 
 struct ShortcutRow: View {
@@ -846,8 +935,10 @@ struct ShortcutRow: View {
     let onHover: (Bool) -> Void
 
     var body: some View {
+        let tokens = KeyTokenParser.parse(item.keys)
+
         Button(action: onSelect) {
-            HStack(alignment: .center) {
+            HStack(alignment: .center, spacing: 4) {
                 Text(item.title)
                     .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
                     .foregroundColor(isSelected ? .white : (isHovered ? .white : .white.opacity(0.88)))
@@ -855,13 +946,24 @@ struct ShortcutRow: View {
 
                 Spacer(minLength: 8)
 
-                Text(item.keys)
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(isSelected ? accentColor : (isHovered ? accentColor.opacity(0.25) : Color.white.opacity(0.14)))
-                    .foregroundColor(isSelected ? .black : accentColor)
-                    .cornerRadius(5)
+                // Distinct Key Token Badges
+                HStack(spacing: 3) {
+                    ForEach(Array(tokens.enumerated()), id: \.offset) { _, token in
+                        Text(token.text)
+                            .font(.system(size: token.isSpecial ? 11 : 10, weight: .bold, design: .monospaced))
+                            .padding(.horizontal, token.isSpecial ? 5 : 4)
+                            .padding(.vertical, 2)
+                            .foregroundColor(isSelected ? .black : token.color)
+                            .background(
+                                RoundedRectangle(cornerRadius: 4)
+                                    .fill(isSelected ? token.color : (token.isSpecial ? token.color.opacity(0.18) : Color.white.opacity(0.12)))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 4)
+                                    .stroke(isSelected ? Color.clear : (token.isSpecial ? token.color.opacity(0.40) : Color.white.opacity(0.20)), lineWidth: 0.75)
+                            )
+                    }
+                }
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
@@ -1190,6 +1292,44 @@ struct HUDView: View {
                     .frame(minHeight: geo.size.height)
                 }
             }
+
+            // Bottom Modifiers Legend Bar
+            Divider()
+                .background(Color.white.opacity(0.12))
+
+            HStack(spacing: 16) {
+                Text("MODIFIERS:")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(Color.white.opacity(0.45))
+                    .padding(.trailing, -4)
+
+                ForEach(modifierLegendItems) { item in
+                    HStack(spacing: 4) {
+                        Text(item.symbol)
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .foregroundColor(item.color)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(
+                                RoundedRectangle(cornerRadius: 3)
+                                    .fill(item.color.opacity(0.18))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 3)
+                                    .stroke(item.color.opacity(0.35), lineWidth: 0.75)
+                            )
+
+                        Text(item.name)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(Color.white.opacity(0.70))
+                    }
+                }
+
+                Spacer()
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 8)
+            .background(Color.black.opacity(0.35))
         }
         .frame(minWidth: 500, minHeight: 350)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
