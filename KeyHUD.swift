@@ -1776,6 +1776,13 @@ struct SettingsView: View {
                         KeybindingEditorWindowController.shared.openEditor()
                     }
 
+                    Button("Open Shortcuts JSON...") {
+                        AppDelegate.shared?.openConfig()
+                    }
+                    Spacer()
+                }
+
+                HStack(spacing: 12) {
                     Button("Import File (.json / .keyclu)...") {
                         AppDelegate.shared?.promptImportFile()
                     }
@@ -1822,13 +1829,13 @@ class SettingsWindowController: NSWindowController {
 
     init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 520, height: 720),
+            contentRect: NSRect(x: 0, y: 0, width: 560, height: 740),
             styleMask: [.titled, .closable, .resizable],
             backing: .buffered,
             defer: false
         )
         window.title = "KeyHUD Settings"
-        window.minSize = NSSize(width: 480, height: 620)
+        window.minSize = NSSize(width: 520, height: 620)
         window.center()
         window.isReleasedWhenClosed = false
         super.init(window: window)
