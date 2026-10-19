@@ -14,7 +14,8 @@
   - [x] Menu bar items and Settings buttons for Import and Auto-Detect.
 
 - [x] **Keyboard Navigation in Search**
-  - [x] Enable `Up` / `Down` arrow keys to highlight items in search results.
+  - [x] Enable `Up` / `Down` arrow keys to navigate rows within columns.
+  - [x] Enable `Left` / `Right` arrow keys to jump between columns.
   - [x] Visual selection glow, border, and inverted contrast badge on active item.
   - [x] Press `Enter` to execute the highlighted shortcut immediately.
 

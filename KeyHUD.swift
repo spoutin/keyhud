@@ -469,23 +469,27 @@ class ActionExecutor {
     }
 }
 
-// MARK: - Search State with Navigation Index
+// MARK: - Search State with 2D Navigation (Columns & Items)
 
 class SearchState: ObservableObject {
     @Published var query: String = "" {
         didSet {
-            selectedIndex = 0
+            selectedGroupIndex = 0
+            selectedItemIndex = 0
         }
     }
-    @Published var selectedIndex: Int = 0
+    @Published var selectedGroupIndex: Int = 0
+    @Published var selectedItemIndex: Int = 0
 }
 
-// MARK: - Auto-Focusing Native Search Field with Arrow Navigation
+// MARK: - Auto-Focusing Native Search Field with 2D Arrow Navigation
 
 struct SearchBarView: NSViewRepresentable {
     @Binding var text: String
     var onMoveDown: () -> Void
     var onMoveUp: () -> Void
+    var onMoveLeft: () -> Void
+    var onMoveRight: () -> Void
     var onCommit: () -> Void
     var onEscape: () -> Void
 
@@ -508,6 +512,14 @@ struct SearchBarView: NSViewRepresentable {
                 parent.onMoveUp()
                 return true
             }
+            if commandSelector == #selector(NSResponder.moveLeft(_:)) {
+                parent.onMoveLeft()
+                return true
+            }
+            if commandSelector == #selector(NSResponder.moveRight(_:)) {
+                parent.onMoveRight()
+                return true
+            }
             if commandSelector == #selector(NSResponder.insertNewline(_:)) {
                 parent.onCommit()
                 return true
@@ -524,7 +536,7 @@ struct SearchBarView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSTextField {
         let tf = NSTextField()
-        tf.placeholderString = "Search shortcuts... (↑/↓ to navigate, Enter to run, Esc to close)"
+        tf.placeholderString = "Search shortcuts... (↑/↓/←/→ to navigate, Enter to run, Esc to close)"
         tf.isBordered = false
         tf.drawsBackground = false
         tf.focusRingType = .none
@@ -610,14 +622,23 @@ struct HUDView: View {
         }
     }
 
-    var flatFilteredItems: [ShortcutItem] {
-        filteredGroups.flatMap { $0.items }
+    var currentGroupIndex: Int {
+        guard !filteredGroups.isEmpty else { return 0 }
+        return min(max(0, searchState.selectedGroupIndex), filteredGroups.count - 1)
+    }
+
+    var currentItemIndex: Int {
+        guard !filteredGroups.isEmpty else { return 0 }
+        let grp = filteredGroups[currentGroupIndex]
+        guard !grp.items.isEmpty else { return 0 }
+        return min(max(0, searchState.selectedItemIndex), grp.items.count - 1)
     }
 
     var currentSelectedItem: ShortcutItem? {
-        guard !flatFilteredItems.isEmpty else { return nil }
-        let idx = min(max(0, searchState.selectedIndex), flatFilteredItems.count - 1)
-        return flatFilteredItems[idx]
+        guard !filteredGroups.isEmpty else { return nil }
+        let grp = filteredGroups[currentGroupIndex]
+        guard !grp.items.isEmpty else { return nil }
+        return grp.items[currentItemIndex]
     }
 
     private func executeCurrentSelection() {
@@ -627,13 +648,45 @@ struct HUDView: View {
     }
 
     private func moveSelectionDown() {
-        guard !flatFilteredItems.isEmpty else { return }
-        searchState.selectedIndex = min(flatFilteredItems.count - 1, searchState.selectedIndex + 1)
+        guard !filteredGroups.isEmpty else { return }
+        let grp = filteredGroups[currentGroupIndex]
+        guard !grp.items.isEmpty else { return }
+        if searchState.selectedItemIndex < grp.items.count - 1 {
+            searchState.selectedItemIndex += 1
+        }
     }
 
     private func moveSelectionUp() {
-        guard !flatFilteredItems.isEmpty else { return }
-        searchState.selectedIndex = max(0, searchState.selectedIndex - 1)
+        guard !filteredGroups.isEmpty else { return }
+        if searchState.selectedItemIndex > 0 {
+            searchState.selectedItemIndex -= 1
+        }
+    }
+
+    private func moveSelectionRight() {
+        guard !filteredGroups.isEmpty else { return }
+        if searchState.selectedGroupIndex < filteredGroups.count - 1 {
+            searchState.selectedGroupIndex += 1
+            let newGrp = filteredGroups[searchState.selectedGroupIndex]
+            if !newGrp.items.isEmpty {
+                searchState.selectedItemIndex = min(searchState.selectedItemIndex, newGrp.items.count - 1)
+            } else {
+                searchState.selectedItemIndex = 0
+            }
+        }
+    }
+
+    private func moveSelectionLeft() {
+        guard !filteredGroups.isEmpty else { return }
+        if searchState.selectedGroupIndex > 0 {
+            searchState.selectedGroupIndex -= 1
+            let newGrp = filteredGroups[searchState.selectedGroupIndex]
+            if !newGrp.items.isEmpty {
+                searchState.selectedItemIndex = min(searchState.selectedItemIndex, newGrp.items.count - 1)
+            } else {
+                searchState.selectedItemIndex = 0
+            }
+        }
     }
 
     var body: some View {
@@ -659,6 +712,8 @@ struct HUDView: View {
                         text: $searchState.query,
                         onMoveDown: moveSelectionDown,
                         onMoveUp: moveSelectionUp,
+                        onMoveLeft: moveSelectionLeft,
+                        onMoveRight: moveSelectionRight,
                         onCommit: executeCurrentSelection,
                         onEscape: onDismiss
                     )
@@ -676,7 +731,7 @@ struct HUDView: View {
                 .padding(.vertical, 5)
                 .background(Color.white.opacity(0.12))
                 .cornerRadius(8)
-                .frame(width: 400)
+                .frame(width: 440)
 
                 Button(action: onDismiss) {
                     Image(systemName: "xmark.circle.fill")
@@ -705,7 +760,7 @@ struct HUDView: View {
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .padding(40)
                         } else {
-                            ForEach(filteredGroups) { group in
+                            ForEach(Array(filteredGroups.enumerated()), id: \.element.id) { groupIndex, group in
                                 VStack(alignment: .leading, spacing: 8) {
                                     Text(group.title.uppercased())
                                         .font(.system(size: 11, weight: .bold))
@@ -714,9 +769,11 @@ struct HUDView: View {
 
                                     ScrollView(.vertical, showsIndicators: true) {
                                         VStack(alignment: .leading, spacing: 4) {
-                                            ForEach(group.items) { item in
-                                                let isSelected = (currentSelectedItem?.id == item.id)
+                                            ForEach(Array(group.items.enumerated()), id: \.element.id) { itemIndex, item in
+                                                let isSelected = (currentGroupIndex == groupIndex && currentItemIndex == itemIndex)
                                                 ShortcutRow(item: item, isSelected: isSelected) {
+                                                    searchState.selectedGroupIndex = groupIndex
+                                                    searchState.selectedItemIndex = itemIndex
                                                     onExecute(item)
                                                 }
                                             }
