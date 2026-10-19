@@ -38,10 +38,12 @@
   - [x] In-memory document staging with dirty tracking, "Save Changes", and "Revert" actions.
   - [x] Merges custom shortcuts alongside native app menus for non-terminal Mac apps.
 
-- [ ] **Global Shortcuts Section (System-wide, similar to KeyClu)**
-  - [ ] Dedicated "Global" column/category visible across all applications (macOS system shortcuts: Window Tiling, Screenshots, Mission Control, Spotlight, App Switching).
-  - [ ] Customizable global shortcuts stored under a `"global"` entry in `custom_shortcuts.json`.
-  - [ ] Toggle in Settings to show or hide the Global shortcuts column.
+- [x] **Global Shortcuts & Scope Switcher (AeroSpace, macOS System, App-Specific)**
+  - [x] Header scope switcher dropdown with dedicated icons (`[App Icon]` Active App, `[macwindow.on.rectangle]` AeroSpace Tiling, `[apple.logo]` macOS System).
+  - [x] AeroSpace config parser (`~/.config/aerospace/aerospace.toml`) auto-categorizing window focus, movement, workspaces, and service mode bindings.
+  - [x] Built-in comprehensive macOS System cheatsheet (App switching, screenshots, Mission Control & Spaces, system accessibility).
+  - [x] Instant reactive column grid update without closing or dismissing the HUD.
+  - [x] Global shortcut execution via system-level event dispatch.
 
 ---
 

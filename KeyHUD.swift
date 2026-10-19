@@ -837,15 +837,41 @@ class ActionExecutor {
         if !AppSettings.shared.isPinned {
             HUDWindowController.shared.hide()
         }
-        guard let app = targetApp else { return }
 
-        app.activate()
+        // If target app exists, activate it
+        if let app = targetApp {
+            app.activate()
+        }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
             if let axElement = item.axElement {
                 AXUIElementPerformAction(axElement, kAXPressAction as CFString)
-            } else {
+            } else if let app = targetApp {
                 self.synthesizeKeystrokes(keys: item.keys, pid: app.processIdentifier)
+            } else {
+                // Global shortcut execution: post to active HID system
+                self.synthesizeGlobalKeystrokes(keys: item.keys)
+            }
+        }
+    }
+
+    private func synthesizeGlobalKeystrokes(keys: String) {
+        let parts = keys.components(separatedBy: " ").filter { !$0.isEmpty && $0 != "/" }
+        var delay = 0.0
+        let source = CGEventSource(stateID: .hidSystemState)
+
+        for part in parts {
+            if let (code, flags) = parseChord(part) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    if let down = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: true),
+                       let up = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: false) {
+                        down.flags = flags
+                        up.flags = flags
+                        down.post(tap: .cghidEventTap)
+                        up.post(tap: .cghidEventTap)
+                    }
+                }
+                delay += 0.025
             }
         }
     }
