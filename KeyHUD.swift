@@ -353,6 +353,24 @@ class CustomShortcutsManager {
 
         var fullConfig = loadConfig()
         fullConfig["com.mitchellh.ghostty"] = ghosttyConfig
+
+        // 4. Auto-detect from all running regular Mac apps (Chrome, Safari, Slack, Obsidian, Finder, etc.)
+        for app in NSWorkspace.shared.runningApplications where app.activationPolicy == .regular {
+            if let bid = app.bundleIdentifier, bid != Bundle.main.bundleIdentifier, bid != "com.mitchellh.ghostty" {
+                if fullConfig[bid] == nil {
+                    let scanned = MenuScanner.scan(app: app)
+                    if !scanned.isEmpty {
+                        var appDict: [String: [[String: String]]] = [:]
+                        for group in scanned {
+                            appDict[group.title] = group.items.map { ["title": $0.title, "keys": $0.keys] }
+                            detectedCount += group.items.count
+                        }
+                        fullConfig[bid] = appDict
+                    }
+                }
+            }
+        }
+
         try? saveConfig(fullConfig)
 
         return detectedCount
@@ -363,7 +381,11 @@ class CustomShortcutsManager {
 
 class EditorState: ObservableObject {
     @Published var config: [String: [String: [[String: String]]]] = [:]
-    @Published var selectedBundleID: String = ""
+    @Published var selectedBundleID: String = "" {
+        didSet {
+            autoDetectIfEmpty(for: selectedBundleID)
+        }
+    }
     @Published var isDirty: Bool = false
     @Published var newCategoryName: String = ""
     @Published var isAddingCategory: Bool = false
@@ -383,19 +405,57 @@ class EditorState: ObservableObject {
                 self.config[target] = [:]
             }
             self.selectedBundleID = target
-        } else if !self.selectedBundleID.isEmpty && self.config[self.selectedBundleID] != nil {
+        } else if !self.selectedBundleID.isEmpty && (self.config[self.selectedBundleID] != nil || availableApps.contains(self.selectedBundleID)) {
             // retain selection
         } else {
             self.selectedBundleID = loaded.keys.sorted().first ?? "com.mitchellh.ghostty"
         }
+        autoDetectIfEmpty(for: self.selectedBundleID)
+    }
+
+    func autoDetectIfEmpty(for bundleID: String) {
+        guard !bundleID.isEmpty else { return }
+        if config[bundleID] == nil || config[bundleID]?.isEmpty == true {
+            autoDetectFromRunningApp(bundleID: bundleID)
+        }
+    }
+
+    func autoDetectFromRunningApp(bundleID: String) {
+        guard !bundleID.isEmpty else { return }
+        if let runningApp = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == bundleID }) {
+            let scanned = MenuScanner.scan(app: runningApp)
+            if !scanned.isEmpty {
+                var appDict: [String: [[String: String]]] = [:]
+                for group in scanned {
+                    appDict[group.title] = group.items.map { ["title": $0.title, "keys": $0.keys] }
+                }
+                config[bundleID] = appDict
+            }
+        }
     }
 
     var availableApps: [String] {
-        var keys = Set(config.keys)
-        if !selectedBundleID.isEmpty {
-            keys.insert(selectedBundleID)
+        var set = Set(config.keys)
+        let running = NSWorkspace.shared.runningApplications
+        for app in running where app.activationPolicy == .regular {
+            if let bid = app.bundleIdentifier, bid != Bundle.main.bundleIdentifier {
+                set.insert(bid)
+            }
         }
-        return keys.sorted()
+        if !selectedBundleID.isEmpty {
+            set.insert(selectedBundleID)
+        }
+        return set.sorted()
+    }
+
+    func displayName(for bundleID: String) -> String {
+        if let running = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == bundleID }),
+           let name = running.localizedName {
+            return "\(name) (\(bundleID))"
+        }
+        if bundleID == "com.mitchellh.ghostty" { return "Ghostty (\(bundleID))" }
+        if bundleID == "com.google.Chrome" { return "Google Chrome (\(bundleID))" }
+        return bundleID
     }
 
     var currentCategories: [String] {
@@ -1285,11 +1345,21 @@ struct KeybindingEditorView: View {
 
                     Picker("", selection: $state.selectedBundleID) {
                         ForEach(state.availableApps, id: \.self) { app in
-                            Text(app).tag(app)
+                            Text(state.displayName(for: app)).tag(app)
                         }
                     }
                     .pickerStyle(MenuPickerStyle())
-                    .frame(width: 200)
+                    .frame(minWidth: 240)
+
+                    Button(action: {
+                        state.autoDetectFromRunningApp(bundleID: state.selectedBundleID)
+                        state.isDirty = true
+                    }) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 13))
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .help("Re-detect shortcuts from running application's menu bar")
 
                     Button(action: {
                         state.isAddingApp.toggle()
