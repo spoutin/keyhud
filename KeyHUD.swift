@@ -1063,85 +1063,86 @@ struct HUDView: View {
 
             // Resizable Columns Content
             GeometryReader { geo in
-                ScrollView(.horizontal, showsIndicators: true) {
-                    HStack(alignment: .top, spacing: 16) {
-                        if filteredGroups.isEmpty {
-                            if !AXIsProcessTrusted() {
-                                VStack(spacing: 16) {
-                                    Image(systemName: "lock.shield.fill")
-                                        .font(.system(size: 44))
-                                        .foregroundColor(.orange)
+                if filteredGroups.isEmpty {
+                    VStack {
+                        Spacer()
+                        if !AXIsProcessTrusted() {
+                            VStack(spacing: 16) {
+                                Image(systemName: "lock.shield.fill")
+                                    .font(.system(size: 44))
+                                    .foregroundColor(.orange)
 
-                                    Text("Accessibility Permission Required")
-                                        .font(.system(size: 18, weight: .bold))
-                                        .foregroundColor(.white)
+                                Text("Accessibility Permission Required")
+                                    .font(.system(size: 18, weight: .bold))
+                                    .foregroundColor(.white)
 
-                                    Text("macOS requires Accessibility permission for KeyHUD to auto-detect shortcuts from native apps like \(appName).\n\nIf you already turned it ON in System Settings, click Relaunch KeyHUD below so macOS applies the permission token.")
-                                        .font(.system(size: 13, weight: .medium))
-                                        .foregroundColor(Color.white.opacity(0.92))
-                                        .multilineTextAlignment(.center)
-                                        .lineSpacing(4)
-                                        .frame(maxWidth: 440)
+                                Text("macOS requires Accessibility permission for KeyHUD to auto-detect shortcuts from native apps like \(appName).\n\nIf you already turned it ON in System Settings, click Relaunch KeyHUD below so macOS applies the permission token.")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(Color.white.opacity(0.92))
+                                    .multilineTextAlignment(.center)
+                                    .lineSpacing(4)
+                                    .frame(maxWidth: 440)
 
-                                    HStack(spacing: 12) {
-                                        Button(action: {
-                                            AppDelegate.shared?.relaunchApp()
-                                        }) {
-                                            HStack(spacing: 6) {
-                                                Image(systemName: "arrow.clockwise")
-                                                Text("Relaunch KeyHUD")
-                                            }
-                                            .font(.system(size: 13, weight: .semibold))
-                                            .foregroundColor(.black)
-                                            .padding(.horizontal, 14)
-                                            .padding(.vertical, 8)
-                                            .background(accent)
-                                            .cornerRadius(6)
+                                HStack(spacing: 12) {
+                                    Button(action: {
+                                        AppDelegate.shared?.relaunchApp()
+                                    }) {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "arrow.clockwise")
+                                            Text("Relaunch KeyHUD")
                                         }
-                                        .buttonStyle(PlainButtonStyle())
-
-                                        Button(action: {
-                                            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
-                                                NSWorkspace.shared.open(url)
-                                            }
-                                        }) {
-                                            HStack(spacing: 6) {
-                                                Image(systemName: "gearshape")
-                                                Text("Open Privacy Settings")
-                                            }
-                                            .font(.system(size: 13, weight: .medium))
-                                            .foregroundColor(.white)
-                                            .padding(.horizontal, 14)
-                                            .padding(.vertical, 8)
-                                            .background(Color.white.opacity(0.18))
-                                            .cornerRadius(6)
-                                        }
-                                        .buttonStyle(PlainButtonStyle())
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundColor(.black)
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 8)
+                                        .background(accent)
+                                        .cornerRadius(6)
                                     }
-                                    .padding(.top, 4)
+                                    .buttonStyle(PlainButtonStyle())
+
+                                    Button(action: {
+                                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                                            NSWorkspace.shared.open(url)
+                                        }
+                                    }) {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "gearshape")
+                                            Text("Open Privacy Settings")
+                                        }
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 8)
+                                        .background(Color.white.opacity(0.18))
+                                        .cornerRadius(6)
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
                                 }
-                                .padding(28)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 14)
-                                        .fill(Color(red: 0.16, green: 0.16, blue: 0.20))
-                                        .shadow(color: Color.black.opacity(0.5), radius: 12, x: 0, y: 6)
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 14)
-                                        .stroke(Color.white.opacity(0.22), lineWidth: 1.5)
-                                )
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                .padding(40)
-                            } else {
-                                VStack(spacing: 12) {
-                                    Text("No shortcuts found")
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(.gray)
-                                }
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                .padding(40)
+                                .padding(.top, 4)
                             }
+                            .padding(28)
+                            .background(
+                                RoundedRectangle(cornerRadius: 14)
+                                    .fill(Color(red: 0.16, green: 0.16, blue: 0.20))
+                                    .shadow(color: Color.black.opacity(0.5), radius: 12, x: 0, y: 6)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14)
+                                    .stroke(Color.white.opacity(0.22), lineWidth: 1.5)
+                            )
                         } else {
+                            VStack(spacing: 12) {
+                                Text("No shortcuts found")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(.gray)
+                            }
+                        }
+                        Spacer()
+                    }
+                    .frame(width: geo.size.width, height: geo.size.height, alignment: .center)
+                } else {
+                    ScrollView(.horizontal, showsIndicators: true) {
+                        HStack(alignment: .top, spacing: 16) {
                             ForEach(Array(filteredGroups.enumerated()), id: \.element.id) { groupIndex, group in
                                 VStack(alignment: .leading, spacing: 8) {
                                     Text(group.title.uppercased())
