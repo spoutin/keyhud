@@ -2,10 +2,11 @@
 
 ## 🎯 High Priority
 
-- [ ] **Click-to-Execute Actions**
-  - [ ] For Native Mac Apps: Call `AXUIElementPerformAction(kAXPressAction)` on click to trigger the menu action in the target app.
-  - [ ] For Terminal / Custom Shortcuts: Synthesize and post `CGEvent` keystrokes to the target app (Ghostty) on click.
-  - [ ] Automatically close/hide HUD upon executing an action.
+- [x] **Click-to-Execute Actions**
+  - [x] For Native Mac Apps: Call `AXUIElementPerformAction(kAXPressAction)` on click to trigger the menu action in the target app.
+  - [x] For Terminal / Custom Shortcuts: Synthesize and post `CGEvent` keystrokes to the target app (Ghostty) on click.
+  - [x] Automatically close/hide HUD upon executing an action.
+  - [x] Press `Enter` in search bar to execute the first matched shortcut immediately.
 
 - [ ] **Keyboard Navigation in Search**
   - [ ] Enable `Up` / `Down` arrow keys to highlight items in search results.
