@@ -1299,8 +1299,10 @@ class HotKeyManager {
     private var lastTapTimes: [Date] = []
     private let tapWindow: TimeInterval = 0.4
     private var isCmdCurrentlyDown = false
+    private var shouldIgnoreNextCmdUp = false
 
     func start() {
+        // Global monitors (when other applications are active)
         NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
             self?.handleFlagsChanged(event)
         }
@@ -1312,6 +1314,23 @@ class HotKeyManager {
                     HUDWindowController.shared.toggle()
                 }
             }
+        }
+
+        // Local monitors (when KeyHUD is active / overlay is open)
+        NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+            self?.handleFlagsChanged(event)
+            return event
+        }
+
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            if event.keyCode == 44 && flags.contains(.command) && flags.contains(.shift) {
+                DispatchQueue.main.async {
+                    HUDWindowController.shared.toggle()
+                }
+                return nil
+            }
+            return event
         }
     }
 
@@ -1342,8 +1361,9 @@ class HotKeyManager {
 
         switch trigger {
         case .singleHold:
-            let work = DispatchWorkItem {
-                HUDWindowController.shared.show()
+            let work = DispatchWorkItem { [weak self] in
+                self?.shouldIgnoreNextCmdUp = true
+                HUDWindowController.shared.toggle()
             }
             cmdWorkItem = work
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
@@ -1351,19 +1371,22 @@ class HotKeyManager {
         case .doubleTap:
             if lastTapTimes.count >= 1 {
                 lastTapTimes.removeAll()
+                shouldIgnoreNextCmdUp = true
                 HUDWindowController.shared.toggle()
             }
 
         case .tripleTap:
             if lastTapTimes.count >= 2 {
                 lastTapTimes.removeAll()
+                shouldIgnoreNextCmdUp = true
                 HUDWindowController.shared.toggle()
             }
 
         case .doubleTapAndHold:
             if lastTapTimes.count >= 1 {
-                let work = DispatchWorkItem {
-                    HUDWindowController.shared.show()
+                let work = DispatchWorkItem { [weak self] in
+                    self?.shouldIgnoreNextCmdUp = true
+                    HUDWindowController.shared.toggle()
                 }
                 cmdWorkItem = work
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: work)
@@ -1372,6 +1395,10 @@ class HotKeyManager {
     }
 
     private func onCmdUp() {
+        if shouldIgnoreNextCmdUp {
+            shouldIgnoreNextCmdUp = false
+            return
+        }
         lastTapTimes.append(Date())
     }
 }
