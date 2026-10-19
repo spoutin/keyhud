@@ -37,6 +37,15 @@ enum TriggerType: Int, CaseIterable, Identifiable {
         case .doubleTap: return "Double-Tap ⌘"
         }
     }
+
+    var shortBadge: String {
+        switch self {
+        case .doubleTapAndHold: return "Double-Tap ⌘ & Hold"
+        case .tripleTap: return "Triple-Tap ⌘"
+        case .singleHold: return "Hold ⌘"
+        case .doubleTap: return "Double-Tap ⌘"
+        }
+    }
 }
 
 // MARK: - App Settings & Preferences
@@ -45,13 +54,20 @@ class AppSettings: ObservableObject {
     static let shared = AppSettings()
 
     @Published var widthPercent: Double {
-        didSet { UserDefaults.standard.set(widthPercent, forKey: "widthPercent") }
+        didSet {
+            UserDefaults.standard.set(widthPercent, forKey: "widthPercent")
+        }
     }
     @Published var heightPercent: Double {
-        didSet { UserDefaults.standard.set(heightPercent, forKey: "heightPercent") }
+        didSet {
+            UserDefaults.standard.set(heightPercent, forKey: "heightPercent")
+        }
     }
     @Published var triggerType: Int {
-        didSet { UserDefaults.standard.set(triggerType, forKey: "triggerType") }
+        didSet {
+            UserDefaults.standard.set(triggerType, forKey: "triggerType")
+            AppDelegate.shared?.updateToggleMenuItemTitle()
+        }
     }
 
     init() {
@@ -118,7 +134,6 @@ class CustomShortcutsManager {
         return result.isEmpty ? nil : result
     }
 
-    // MARK: - Import KeyClu or JSON file
     func importFile(from url: URL) -> Result<Int, Error> {
         do {
             let data = try Data(contentsOf: url)
@@ -190,14 +205,12 @@ class CustomShortcutsManager {
         return (title: title, keys: keys.isEmpty ? "—" : keys)
     }
 
-    // MARK: - Auto-Detect Local Configurations
     func autoDetectLocalConfigs() -> Int {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         var detectedCount = 0
-
         var ghosttyConfig = loadConfig()["com.mitchellh.ghostty"] ?? [:]
 
-        // 1. Scan Herdr config (~/.config/herdr/config.toml)
+        // 1. Scan Herdr config
         let herdrConfigPath = "\(home)/.config/herdr/config.toml"
         if let herdrContent = try? String(contentsOfFile: herdrConfigPath, encoding: .utf8) {
             var herdrItems: [[String: String]] = [
@@ -228,7 +241,7 @@ class CustomShortcutsManager {
             detectedCount += herdrItems.count
         }
 
-        // 2. Scan Zsh Keybindings (~/.config/zsh/)
+        // 2. Scan Zsh Keybindings
         let zshItems: [[String: String]] = [
             ["title": "Atuin History Search", "keys": "⌃R"],
             ["title": "FZF File Picker", "keys": "⌃T"],
@@ -244,7 +257,7 @@ class CustomShortcutsManager {
         ghosttyConfig["Zsh & Shell"] = zshItems
         detectedCount += zshItems.count
 
-        // 3. Scan Neovim Custom Keymaps (~/.config/nvim/lua/config/keymaps.lua)
+        // 3. Scan Neovim Custom Keymaps
         let nvimKeymapsPath = "\(home)/.config/nvim/lua/config/keymaps.lua"
         var customWindowItems: [[String: String]] = [
             ["title": "Focus Left Window / Split", "keys": "⌃h"],
@@ -876,7 +889,7 @@ class HUDWindowController: NSWindowController {
     }
 }
 
-// MARK: - Settings Window & View
+// MARK: - Native Mac Settings View
 
 struct SettingsView: View {
     @ObservedObject var settings = AppSettings.shared
@@ -884,54 +897,58 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            HStack {
+            // Header
+            HStack(spacing: 8) {
                 Image(systemName: "slider.horizontal.3")
-                    .font(.system(size: 20))
-                    .foregroundColor(.cyan)
-                Text("KeyHUD Settings")
                     .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(.accentColor)
+                Text("KeyHUD Settings")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(.primary)
                 Spacer()
             }
 
-            // Sizing Sliders
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Window Size")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.gray)
+            // Window Sizing Section
+            VStack(alignment: .leading, spacing: 10) {
+                Text("WINDOW SIZE")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.secondary)
 
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text("Horizontal Size (% of screen):")
+                        Text("Horizontal (% of screen)")
                             .font(.system(size: 13))
+                            .foregroundColor(.primary)
                         Spacer()
                         Text("\(Int(settings.widthPercent))%")
-                            .font(.system(size: 13, weight: .bold, design: .monospaced))
-                            .foregroundColor(.cyan)
+                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                            .foregroundColor(.accentColor)
                     }
                     Slider(value: $settings.widthPercent, in: 25...100, step: 1)
                 }
 
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text("Vertical Size (% of screen):")
+                        Text("Vertical (% of screen)")
                             .font(.system(size: 13))
+                            .foregroundColor(.primary)
                         Spacer()
                         Text("\(Int(settings.heightPercent))%")
-                            .font(.system(size: 13, weight: .bold, design: .monospaced))
-                            .foregroundColor(.cyan)
+                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                            .foregroundColor(.accentColor)
                     }
                     Slider(value: $settings.heightPercent, in: 25...100, step: 1)
                 }
             }
             .padding(14)
-            .background(Color.white.opacity(0.06))
-            .cornerRadius(10)
+            .background(Color(NSColor.controlBackgroundColor))
+            .cornerRadius(8)
 
-            // Activation Trigger Options
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Activation Trigger")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.gray)
+            // Activation Trigger Section
+            VStack(alignment: .leading, spacing: 10) {
+                Text("ACTIVATION TRIGGER")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.secondary)
 
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(TriggerType.allCases) { type in
@@ -940,34 +957,33 @@ struct SettingsView: View {
                         }) {
                             HStack(spacing: 8) {
                                 Image(systemName: settings.triggerType == type.rawValue ? "largecircle.fill.circle" : "circle")
-                                    .foregroundColor(settings.triggerType == type.rawValue ? .cyan : .gray)
+                                    .foregroundColor(settings.triggerType == type.rawValue ? .accentColor : .secondary)
                                 Text(type.title)
                                     .font(.system(size: 13))
-                                    .foregroundColor(.white)
+                                    .foregroundColor(.primary)
                                 Spacer()
                             }
                         }
                         .buttonStyle(PlainButtonStyle())
                     }
                 }
-                .padding(.top, 2)
 
-                Text("Shortcut ⌘⇧/ (Cmd+Shift+/) also toggles KeyHUD anytime.")
+                Text("Global shortcut ⌘⇧/ (Cmd+Shift+/) also activates KeyHUD at any time.")
                     .font(.system(size: 11))
-                    .foregroundColor(.gray)
-                    .padding(.top, 4)
+                    .foregroundColor(.secondary)
+                    .padding(.top, 2)
             }
             .padding(14)
-            .background(Color.white.opacity(0.06))
-            .cornerRadius(10)
+            .background(Color(NSColor.controlBackgroundColor))
+            .cornerRadius(8)
 
-            // Import & Auto-Detect Actions
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Shortcuts & Configurations")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.gray)
+            // Shortcuts & Configs Section
+            VStack(alignment: .leading, spacing: 10) {
+                Text("SHORTCUTS & CONFIGURATIONS")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.secondary)
 
-                HStack(spacing: 10) {
+                HStack(spacing: 12) {
                     Button("Import File (.json / .keyclu)...") {
                         AppDelegate.shared?.promptImportFile()
                     }
@@ -975,12 +991,14 @@ struct SettingsView: View {
                     Button("Auto-Detect Configs") {
                         AppDelegate.shared?.autoDetectAction()
                     }
+                    Spacer()
                 }
             }
             .padding(14)
-            .background(Color.white.opacity(0.06))
-            .cornerRadius(10)
+            .background(Color(NSColor.controlBackgroundColor))
+            .cornerRadius(8)
 
+            // Footer Actions
             HStack {
                 Button("Reset Defaults") {
                     settings.widthPercent = 75
@@ -998,9 +1016,9 @@ struct SettingsView: View {
                 .keyboardShortcut(.defaultAction)
             }
         }
-        .padding(22)
+        .padding(20)
         .frame(width: 440)
-        .background(VisualEffectView(material: .popover, blendingMode: .behindWindow))
+        .background(Color(NSColor.windowBackgroundColor))
     }
 }
 
@@ -1009,7 +1027,7 @@ class SettingsWindowController: NSWindowController {
 
     init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 440, height: 460),
+            contentRect: NSRect(x: 0, y: 0, width: 440, height: 480),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -1046,12 +1064,10 @@ class HotKeyManager {
     private var isCmdCurrentlyDown = false
 
     func start() {
-        // Monitor global modifier flags (Command key events)
         NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
             self?.handleFlagsChanged(event)
         }
 
-        // Monitor global keyDown for Cmd + Shift + /
         NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             if event.keyCode == 44 && flags.contains(.command) && flags.contains(.shift) {
@@ -1123,11 +1139,12 @@ class HotKeyManager {
     }
 }
 
-// MARK: - App Delegate
+// MARK: - App Delegate & Menu Controller
 
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     static var shared: AppDelegate?
     var statusItem: NSStatusItem?
+    var toggleMenuItem: NSMenuItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppDelegate.shared = self
@@ -1138,7 +1155,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "Toggle KeyHUD (⌘⇧/ or Command Tap)", action: #selector(toggleHUD), keyEquivalent: ""))
+        menu.delegate = self
+
+        let toggleItem = NSMenuItem(title: "Toggle KeyHUD", action: #selector(toggleHUD), keyEquivalent: "?")
+        toggleItem.keyEquivalentModifierMask = [.command, .shift]
+        self.toggleMenuItem = toggleItem
+        menu.addItem(toggleItem)
+        updateToggleMenuItemTitle()
+
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ","))
         menu.addItem(NSMenuItem(title: "Import Shortcuts File... (.json / .keyclu)", action: #selector(importFileAction), keyEquivalent: "o"))
@@ -1150,6 +1174,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem?.menu = menu
 
         HotKeyManager.shared.start()
+    }
+
+    func menuWillOpen(_ menu: NSMenu) {
+        updateToggleMenuItemTitle()
+    }
+
+    func updateToggleMenuItemTitle() {
+        let trigger = TriggerType(rawValue: AppSettings.shared.triggerType) ?? .doubleTapAndHold
+        toggleMenuItem?.title = "Toggle KeyHUD (\(trigger.shortBadge))"
     }
 
     @objc func toggleHUD() {
