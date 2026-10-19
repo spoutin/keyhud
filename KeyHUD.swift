@@ -176,6 +176,8 @@ class CustomShortcutsManager {
     }
 
     func saveConfig(_ config: [String: [String: [[String: String]]]]) throws {
+        let dir = URL(fileURLWithPath: configPath).deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let data = try JSONSerialization.data(withJSONObject: config, options: [.prettyPrinted, .sortedKeys])
         try data.write(to: URL(fileURLWithPath: configPath))
     }
@@ -470,10 +472,13 @@ class EditorState: ObservableObject {
               var items = config[selectedBundleID]?[category],
               index < items.count else { return }
         var keys = items[index]["keys"] ?? ""
+        let modifiers: Set<Character> = ["⌃", "⌥", "⇧", "⌘"]
+        let endsWithModifier = keys.last.map { modifiers.contains($0) } ?? false
+
         if mod == "Space" {
-            keys += (keys.isEmpty ? "Space" : " Space")
+            keys += (keys.isEmpty || endsWithModifier ? "Space" : " Space")
         } else if mod == "Esc" {
-            keys += (keys.isEmpty ? "Esc" : " Esc")
+            keys += (keys.isEmpty || endsWithModifier ? "Esc" : " Esc")
         } else {
             keys += mod
         }
@@ -964,6 +969,7 @@ struct HUDView: View {
 
                 // Edit Shortcuts Button
                 Button(action: {
+                    HUDWindowController.shared.hide()
                     KeybindingEditorWindowController.shared.openEditor(bundleID: bundleID)
                 }) {
                     Image(systemName: "square.and.pencil")
