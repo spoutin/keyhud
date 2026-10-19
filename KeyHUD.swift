@@ -21,6 +21,26 @@ struct ShortcutGroup: Identifiable, Equatable {
     let items: [ShortcutItem]
 }
 
+enum AccentTheme: String, CaseIterable, Identifiable {
+    case cyan = "Cyan"
+    case mauve = "Mauve"
+    case blue = "Sapphire Blue"
+    case green = "Neon Green"
+    case amber = "Amber"
+
+    var id: String { rawValue }
+
+    var color: Color {
+        switch self {
+        case .cyan: return Color(red: 0.0, green: 0.85, blue: 1.0)
+        case .mauve: return Color(red: 0.78, green: 0.63, blue: 0.98)
+        case .blue: return Color(red: 0.54, green: 0.77, blue: 0.98)
+        case .green: return Color(red: 0.40, green: 0.95, blue: 0.60)
+        case .amber: return Color(red: 1.0, green: 0.75, blue: 0.40)
+        }
+    }
+}
+
 enum TriggerType: Int, CaseIterable, Identifiable {
     case doubleTapAndHold = 0
     case tripleTap = 1
@@ -69,6 +89,20 @@ class AppSettings: ObservableObject {
             AppDelegate.shared?.updateToggleMenuItemTitle()
         }
     }
+    @Published var accentTheme: String {
+        didSet {
+            UserDefaults.standard.set(accentTheme, forKey: "accentTheme")
+        }
+    }
+    @Published var isPinned: Bool {
+        didSet {
+            UserDefaults.standard.set(isPinned, forKey: "isPinned")
+        }
+    }
+
+    var currentAccentColor: Color {
+        AccentTheme(rawValue: accentTheme)?.color ?? AccentTheme.cyan.color
+    }
 
     init() {
         let savedW = UserDefaults.standard.double(forKey: "widthPercent")
@@ -79,6 +113,11 @@ class AppSettings: ObservableObject {
 
         let savedTrigger = UserDefaults.standard.integer(forKey: "triggerType")
         self.triggerType = (savedTrigger >= 0 && savedTrigger <= 3) ? savedTrigger : 0
+
+        let savedTheme = UserDefaults.standard.string(forKey: "accentTheme")
+        self.accentTheme = (savedTheme != nil && AccentTheme(rawValue: savedTheme!) != nil) ? savedTheme! : AccentTheme.cyan.rawValue
+
+        self.isPinned = UserDefaults.standard.bool(forKey: "isPinned")
     }
 }
 
@@ -382,7 +421,9 @@ class ActionExecutor {
     ]
 
     func execute(item: ShortcutItem, targetApp: NSRunningApplication?) {
-        HUDWindowController.shared.hide()
+        if !AppSettings.shared.isPinned {
+            HUDWindowController.shared.hide()
+        }
         guard let app = targetApp else { return }
 
         app.activate()
@@ -469,7 +510,7 @@ class ActionExecutor {
     }
 }
 
-// MARK: - Search State with 2D Navigation (Columns & Items)
+// MARK: - Search State with 2D Navigation (Columns & Items) & Hover
 
 class SearchState: ObservableObject {
     @Published var query: String = "" {
@@ -480,6 +521,7 @@ class SearchState: ObservableObject {
     }
     @Published var selectedGroupIndex: Int = 0
     @Published var selectedItemIndex: Int = 0
+    @Published var hoveredItemId: UUID? = nil
 }
 
 // MARK: - Auto-Focusing Native Search Field with 2D Arrow Navigation
@@ -557,19 +599,22 @@ struct SearchBarView: NSViewRepresentable {
     }
 }
 
-// MARK: - Shortcut Row View with Selection Highlight
+// MARK: - Shortcut Row View with Theme & Hover Polish
 
 struct ShortcutRow: View {
     let item: ShortcutItem
     let isSelected: Bool
+    let isHovered: Bool
+    let accentColor: Color
     let onSelect: () -> Void
+    let onHover: (Bool) -> Void
 
     var body: some View {
         Button(action: onSelect) {
             HStack(alignment: .center) {
                 Text(item.title)
                     .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
-                    .foregroundColor(isSelected ? .white : .white.opacity(0.88))
+                    .foregroundColor(isSelected ? .white : (isHovered ? .white : .white.opacity(0.88)))
                     .lineLimit(1)
 
                 Spacer(minLength: 8)
@@ -578,23 +623,26 @@ struct ShortcutRow: View {
                     .font(.system(size: 11, weight: .semibold, design: .monospaced))
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(isSelected ? Color.cyan : Color.white.opacity(0.16))
-                    .foregroundColor(isSelected ? .black : Color.cyan)
+                    .background(isSelected ? accentColor : (isHovered ? accentColor.opacity(0.25) : Color.white.opacity(0.14)))
+                    .foregroundColor(isSelected ? .black : accentColor)
                     .cornerRadius(5)
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(isSelected ? Color.cyan.opacity(0.25) : Color.white.opacity(0.04))
+                    .fill(isSelected ? accentColor.opacity(0.25) : (isHovered ? Color.white.opacity(0.08) : Color.white.opacity(0.03)))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 6)
-                    .stroke(isSelected ? Color.cyan.opacity(0.8) : Color.clear, lineWidth: 1.5)
+                    .stroke(isSelected ? accentColor.opacity(0.85) : (isHovered ? accentColor.opacity(0.35) : Color.clear), lineWidth: 1.5)
             )
             .contentShape(Rectangle())
         }
         .buttonStyle(PlainButtonStyle())
+        .onHover { hovering in
+            onHover(hovering)
+        }
     }
 }
 
@@ -608,6 +656,7 @@ struct HUDView: View {
     let onDismiss: () -> Void
 
     @ObservedObject var searchState: SearchState
+    @ObservedObject var settings = AppSettings.shared
 
     var filteredGroups: [ShortcutGroup] {
         let q = searchState.query.trimmingCharacters(in: .whitespaces).lowercased()
@@ -690,6 +739,8 @@ struct HUDView: View {
     }
 
     var body: some View {
+        let accent = settings.currentAccentColor
+
         VStack(spacing: 0) {
             // Drag Header / Search Bar
             HStack(spacing: 12) {
@@ -731,8 +782,21 @@ struct HUDView: View {
                 .padding(.vertical, 5)
                 .background(Color.white.opacity(0.12))
                 .cornerRadius(8)
-                .frame(width: 440)
+                .frame(width: 420)
 
+                // Pin Button
+                Button(action: {
+                    settings.isPinned.toggle()
+                }) {
+                    Image(systemName: settings.isPinned ? "pin.fill" : "pin")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(settings.isPinned ? accent : .gray)
+                        .padding(4)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help(settings.isPinned ? "Unpin HUD (currently stays open while running shortcuts)" : "Pin HUD (keep cheatsheet open while running shortcuts)")
+
+                // Close Button
                 Button(action: onDismiss) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 18))
@@ -764,18 +828,29 @@ struct HUDView: View {
                                 VStack(alignment: .leading, spacing: 8) {
                                     Text(group.title.uppercased())
                                         .font(.system(size: 11, weight: .bold))
-                                        .foregroundColor(Color.cyan)
+                                        .foregroundColor(accent)
                                         .padding(.bottom, 2)
 
                                     ScrollView(.vertical, showsIndicators: true) {
                                         VStack(alignment: .leading, spacing: 4) {
                                             ForEach(Array(group.items.enumerated()), id: \.element.id) { itemIndex, item in
                                                 let isSelected = (currentGroupIndex == groupIndex && currentItemIndex == itemIndex)
-                                                ShortcutRow(item: item, isSelected: isSelected) {
-                                                    searchState.selectedGroupIndex = groupIndex
-                                                    searchState.selectedItemIndex = itemIndex
-                                                    onExecute(item)
-                                                }
+                                                let isHovered = (searchState.hoveredItemId == item.id)
+
+                                                ShortcutRow(
+                                                    item: item,
+                                                    isSelected: isSelected,
+                                                    isHovered: isHovered,
+                                                    accentColor: accent,
+                                                    onSelect: {
+                                                        searchState.selectedGroupIndex = groupIndex
+                                                        searchState.selectedItemIndex = itemIndex
+                                                        onExecute(item)
+                                                    },
+                                                    onHover: { hovering in
+                                                        searchState.hoveredItemId = hovering ? item.id : nil
+                                                    }
+                                                )
                                             }
                                         }
                                         .padding(.trailing, 4)
@@ -969,7 +1044,11 @@ class HUDWindowController: NSWindowController {
 
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             if event.keyCode == 53 { // Esc
-                self?.hide()
+                if AppSettings.shared.isPinned {
+                    AppSettings.shared.isPinned = false
+                } else {
+                    self?.hide()
+                }
                 return nil
             }
             return event
@@ -997,12 +1076,53 @@ struct SettingsView: View {
             HStack(spacing: 8) {
                 Image(systemName: "slider.horizontal.3")
                     .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(.accentColor)
+                    .foregroundColor(settings.currentAccentColor)
                 Text("KeyHUD Settings")
                     .font(.system(size: 15, weight: .bold))
                     .foregroundColor(.primary)
                 Spacer()
             }
+
+            // Accent Theme Section
+            VStack(alignment: .leading, spacing: 10) {
+                Text("ACCENT THEME")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.secondary)
+
+                HStack(spacing: 12) {
+                    ForEach(AccentTheme.allCases) { theme in
+                        Button(action: {
+                            settings.accentTheme = theme.rawValue
+                        }) {
+                            VStack(spacing: 6) {
+                                ZStack {
+                                    Circle()
+                                        .fill(theme.color)
+                                        .frame(width: 26, height: 26)
+                                    if settings.accentTheme == theme.rawValue {
+                                        Image(systemName: "checkmark")
+                                            .font(.system(size: 12, weight: .bold))
+                                            .foregroundColor(.black)
+                                    }
+                                }
+                                Text(theme.rawValue)
+                                    .font(.system(size: 11, weight: settings.accentTheme == theme.rawValue ? .semibold : .regular))
+                                    .foregroundColor(.primary)
+                            }
+                            .padding(.vertical, 6)
+                            .padding(.horizontal, 8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(settings.accentTheme == theme.rawValue ? theme.color.opacity(0.18) : Color.clear)
+                            )
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                }
+            }
+            .padding(14)
+            .background(Color(NSColor.controlBackgroundColor))
+            .cornerRadius(8)
 
             // Window Sizing Section
             VStack(alignment: .leading, spacing: 10) {
@@ -1018,7 +1138,7 @@ struct SettingsView: View {
                         Spacer()
                         Text("\(Int(settings.widthPercent))%")
                             .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                            .foregroundColor(.accentColor)
+                            .foregroundColor(settings.currentAccentColor)
                     }
                     Slider(value: $settings.widthPercent, in: 25...100, step: 1)
                 }
@@ -1031,7 +1151,7 @@ struct SettingsView: View {
                         Spacer()
                         Text("\(Int(settings.heightPercent))%")
                             .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                            .foregroundColor(.accentColor)
+                            .foregroundColor(settings.currentAccentColor)
                     }
                     Slider(value: $settings.heightPercent, in: 25...100, step: 1)
                 }
@@ -1040,9 +1160,9 @@ struct SettingsView: View {
             .background(Color(NSColor.controlBackgroundColor))
             .cornerRadius(8)
 
-            // Activation Trigger Section
+            // Activation Trigger & Behavior Section
             VStack(alignment: .leading, spacing: 10) {
-                Text("ACTIVATION TRIGGER")
+                Text("ACTIVATION & BEHAVIOR")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(.secondary)
 
@@ -1053,7 +1173,7 @@ struct SettingsView: View {
                         }) {
                             HStack(spacing: 8) {
                                 Image(systemName: settings.triggerType == type.rawValue ? "largecircle.fill.circle" : "circle")
-                                    .foregroundColor(settings.triggerType == type.rawValue ? .accentColor : .secondary)
+                                    .foregroundColor(settings.triggerType == type.rawValue ? settings.currentAccentColor : .secondary)
                                 Text(type.title)
                                     .font(.system(size: 13))
                                     .foregroundColor(.primary)
@@ -1063,6 +1183,25 @@ struct SettingsView: View {
                         .buttonStyle(PlainButtonStyle())
                     }
                 }
+
+                Divider()
+                    .padding(.vertical, 2)
+
+                // Persistent Pin Toggle
+                Button(action: {
+                    settings.isPinned.toggle()
+                }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: settings.isPinned ? "checkmark.square.fill" : "square")
+                            .foregroundColor(settings.isPinned ? settings.currentAccentColor : .secondary)
+                            .font(.system(size: 14))
+                        Text("Persistent Pin Mode (keep HUD open after running shortcuts)")
+                            .font(.system(size: 13))
+                            .foregroundColor(.primary)
+                        Spacer()
+                    }
+                }
+                .buttonStyle(PlainButtonStyle())
 
                 Text("Global shortcut ⌘⇧/ (Cmd+Shift+/) also activates KeyHUD at any time.")
                     .font(.system(size: 11))
@@ -1100,6 +1239,8 @@ struct SettingsView: View {
                     settings.widthPercent = 75
                     settings.heightPercent = 65
                     settings.triggerType = 0
+                    settings.accentTheme = AccentTheme.cyan.rawValue
+                    settings.isPinned = false
                     HUDWindowController.shared.applyScreenPercentageFrame()
                 }
 
@@ -1113,7 +1254,7 @@ struct SettingsView: View {
             }
         }
         .padding(20)
-        .frame(width: 440)
+        .frame(width: 460)
         .background(Color(NSColor.windowBackgroundColor))
     }
 }
@@ -1123,7 +1264,7 @@ class SettingsWindowController: NSWindowController {
 
     init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 440, height: 480),
+            contentRect: NSRect(x: 0, y: 0, width: 460, height: 600),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
