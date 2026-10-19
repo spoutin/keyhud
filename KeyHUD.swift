@@ -21,6 +21,24 @@ struct ShortcutGroup: Identifiable, Equatable {
     let items: [ShortcutItem]
 }
 
+enum TriggerType: Int, CaseIterable, Identifiable {
+    case doubleTapAndHold = 0
+    case tripleTap = 1
+    case singleHold = 2
+    case doubleTap = 3
+
+    var id: Int { rawValue }
+
+    var title: String {
+        switch self {
+        case .doubleTapAndHold: return "Double-Tap ⌘ and Hold (Recommended)"
+        case .tripleTap: return "Triple-Tap ⌘"
+        case .singleHold: return "Hold ⌘ (0.35s)"
+        case .doubleTap: return "Double-Tap ⌘"
+        }
+    }
+}
+
 // MARK: - App Settings & Preferences
 
 class AppSettings: ObservableObject {
@@ -32,6 +50,9 @@ class AppSettings: ObservableObject {
     @Published var heightPercent: Double {
         didSet { UserDefaults.standard.set(heightPercent, forKey: "heightPercent") }
     }
+    @Published var triggerType: Int {
+        didSet { UserDefaults.standard.set(triggerType, forKey: "triggerType") }
+    }
 
     init() {
         let savedW = UserDefaults.standard.double(forKey: "widthPercent")
@@ -39,6 +60,9 @@ class AppSettings: ObservableObject {
 
         let savedH = UserDefaults.standard.double(forKey: "heightPercent")
         self.heightPercent = (savedH >= 20 && savedH <= 100) ? savedH : 65.0
+
+        let savedTrigger = UserDefaults.standard.integer(forKey: "triggerType")
+        self.triggerType = (savedTrigger >= 0 && savedTrigger <= 3) ? savedTrigger : 0
     }
 }
 
@@ -859,7 +883,7 @@ struct SettingsView: View {
     var onClose: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 18) {
             HStack {
                 Image(systemName: "slider.horizontal.3")
                     .font(.system(size: 20))
@@ -870,7 +894,11 @@ struct SettingsView: View {
             }
 
             // Sizing Sliders
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Window Size")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.gray)
+
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Text("Horizontal Size (% of screen):")
@@ -894,6 +922,40 @@ struct SettingsView: View {
                     }
                     Slider(value: $settings.heightPercent, in: 25...100, step: 1)
                 }
+            }
+            .padding(14)
+            .background(Color.white.opacity(0.06))
+            .cornerRadius(10)
+
+            // Activation Trigger Options
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Activation Trigger")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.gray)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(TriggerType.allCases) { type in
+                        Button(action: {
+                            settings.triggerType = type.rawValue
+                        }) {
+                            HStack(spacing: 8) {
+                                Image(systemName: settings.triggerType == type.rawValue ? "largecircle.fill.circle" : "circle")
+                                    .foregroundColor(settings.triggerType == type.rawValue ? .cyan : .gray)
+                                Text(type.title)
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.white)
+                                Spacer()
+                            }
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                }
+                .padding(.top, 2)
+
+                Text("Shortcut ⌘⇧/ (Cmd+Shift+/) also toggles KeyHUD anytime.")
+                    .font(.system(size: 11))
+                    .foregroundColor(.gray)
+                    .padding(.top, 4)
             }
             .padding(14)
             .background(Color.white.opacity(0.06))
@@ -923,6 +985,7 @@ struct SettingsView: View {
                 Button("Reset Defaults") {
                     settings.widthPercent = 75
                     settings.heightPercent = 65
+                    settings.triggerType = 0
                     HUDWindowController.shared.applyScreenPercentageFrame()
                 }
 
@@ -946,7 +1009,7 @@ class SettingsWindowController: NSWindowController {
 
     init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 440, height: 320),
+            contentRect: NSRect(x: 0, y: 0, width: 440, height: 460),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -978,9 +1041,12 @@ class SettingsWindowController: NSWindowController {
 class HotKeyManager {
     static let shared = HotKeyManager()
     private var cmdWorkItem: DispatchWorkItem?
+    private var lastTapTimes: [Date] = []
+    private let tapWindow: TimeInterval = 0.4
+    private var isCmdCurrentlyDown = false
 
     func start() {
-        // Monitor global modifier flags (Holding Command)
+        // Monitor global modifier flags (Command key events)
         NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
             self?.handleFlagsChanged(event)
         }
@@ -1001,17 +1067,59 @@ class HotKeyManager {
         let isOnlyCmd = flags == .command
 
         if isOnlyCmd {
-            if cmdWorkItem == nil {
+            if !isCmdCurrentlyDown {
+                isCmdCurrentlyDown = true
+                onCmdDown()
+            }
+        } else {
+            if isCmdCurrentlyDown {
+                isCmdCurrentlyDown = false
+                onCmdUp()
+            }
+            cmdWorkItem?.cancel()
+            cmdWorkItem = nil
+        }
+    }
+
+    private func onCmdDown() {
+        let now = Date()
+        lastTapTimes = lastTapTimes.filter { now.timeIntervalSince($0) < tapWindow }
+
+        let trigger = TriggerType(rawValue: AppSettings.shared.triggerType) ?? .doubleTapAndHold
+
+        switch trigger {
+        case .singleHold:
+            let work = DispatchWorkItem {
+                HUDWindowController.shared.show()
+            }
+            cmdWorkItem = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
+
+        case .doubleTap:
+            if lastTapTimes.count >= 1 {
+                lastTapTimes.removeAll()
+                HUDWindowController.shared.toggle()
+            }
+
+        case .tripleTap:
+            if lastTapTimes.count >= 2 {
+                lastTapTimes.removeAll()
+                HUDWindowController.shared.toggle()
+            }
+
+        case .doubleTapAndHold:
+            if lastTapTimes.count >= 1 {
                 let work = DispatchWorkItem {
                     HUDWindowController.shared.show()
                 }
                 cmdWorkItem = work
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: work)
             }
-        } else {
-            cmdWorkItem?.cancel()
-            cmdWorkItem = nil
         }
+    }
+
+    private func onCmdUp() {
+        lastTapTimes.append(Date())
     }
 }
 
@@ -1030,7 +1138,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "Toggle KeyHUD (⌘⇧/ or Hold ⌘)", action: #selector(toggleHUD), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Toggle KeyHUD (⌘⇧/ or Command Tap)", action: #selector(toggleHUD), keyEquivalent: ""))
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ","))
         menu.addItem(NSMenuItem(title: "Import Shortcuts File... (.json / .keyclu)", action: #selector(importFileAction), keyEquivalent: "o"))
