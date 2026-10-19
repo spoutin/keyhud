@@ -170,6 +170,11 @@ class CustomShortcutsManager {
         return json
     }
 
+    func allAppBundleIDs() -> [String] {
+        let config = loadConfig()
+        return Array(config.keys).sorted()
+    }
+
     func saveConfig(_ config: [String: [String: [[String: String]]]]) throws {
         let data = try JSONSerialization.data(withJSONObject: config, options: [.prettyPrinted, .sortedKeys])
         try data.write(to: URL(fileURLWithPath: configPath))
@@ -1031,10 +1036,15 @@ class HUDWindowController: NSWindowController {
         let icon = validApp.icon
 
         let groups: [ShortcutGroup]
-        if let customGroups = CustomShortcutsManager.shared.groups(for: bundleID) {
-            groups = customGroups
+        if bundleID == "com.mitchellh.ghostty" {
+            groups = CustomShortcutsManager.shared.groups(for: bundleID) ?? []
         } else {
-            groups = MenuScanner.scan(app: validApp)
+            let scanned = MenuScanner.scan(app: validApp)
+            if let customGroups = CustomShortcutsManager.shared.groups(for: bundleID) {
+                groups = customGroups + scanned
+            } else {
+                groups = scanned
+            }
         }
 
         let hudView = HUDView(
