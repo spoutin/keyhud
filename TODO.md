@@ -74,6 +74,13 @@
   - [x] Interactive header breadcrumb trail showing parent segments with jump-back links.
   - [x] Hierarchical Esc behavior: clears query first, pops navigation history second, and closes the HUD at root.
 
+- [x] **Instant HUD Display & Performance Optimization (< 10ms)**
+  - [x] Reusable resident `NSHostingView` backed by observable `HUDViewModel` to eliminate view teardown/rebuild.
+  - [x] Pre-cached `RunningAppsTracker` with notification-based updates, avoiding disk/icon lookups during render.
+  - [x] In-memory caching for `MenuScanner` to eliminate repeated Accessibility tree crawling.
+  - [x] Removed blocking `/opt/homebrew/bin/aerospace` subprocess execution from main-thread open path.
+  - [x] Zero-latency Carbon `RegisterEventHotKey` for instantaneous `⌘⇧/` triggering at WindowServer level.
+
 ---
 
 ## 🚀 Medium Priority

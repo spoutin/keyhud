@@ -2,6 +2,7 @@ import Cocoa
 import SwiftUI
 import ApplicationServices
 import ServiceManagement
+import Carbon
 
 // MARK: - Models
 
@@ -3522,8 +3523,11 @@ class HotKeyManager {
     private let tapWindow: TimeInterval = 0.4
     private var isCmdCurrentlyDown = false
     private var shouldIgnoreNextCmdUp = false
+    private var carbonHotKeyRef: EventHotKeyRef?
 
     func start() {
+        registerCarbonHotKey()
+
         // Global monitors (when other applications are active)
         NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
             self?.handleFlagsChanged(event)
@@ -3554,6 +3558,32 @@ class HotKeyManager {
             }
             return event
         }
+    }
+
+    private func registerCarbonHotKey() {
+        var gMyHotKeyID = EventHotKeyID()
+        gMyHotKeyID.signature = OSType(0x4B485544) // 'KHUD'
+        gMyHotKeyID.id = 1
+
+        var eventType = EventTypeSpec()
+        eventType.eventClass = OSType(kEventClassKeyboard)
+        eventType.eventKind = OSType(kEventHotKeyPressed)
+
+        InstallEventHandler(GetApplicationEventTarget(), { (_, theEvent, _) -> OSStatus in
+            DispatchQueue.main.async {
+                HUDWindowController.shared.toggle()
+            }
+            return noErr
+        }, 1, &eventType, nil, nil)
+
+        RegisterEventHotKey(
+            UInt32(kVK_ANSI_Slash),
+            UInt32(cmdKey | shiftKey),
+            gMyHotKeyID,
+            GetApplicationEventTarget(),
+            0,
+            &carbonHotKeyRef
+        )
     }
 
     private func handleFlagsChanged(_ event: NSEvent) {
