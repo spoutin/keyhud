@@ -82,9 +82,8 @@
 - [ ] **Export to Markdown**
   - [ ] Button in header to export the current cheatsheet as a formatted `.md` file in `~/Documents`.
 
-- [ ] **Launch at Login / Boot (Start on Boot)**
-  - [ ] Implement `SMAppService.mainApp` (macOS 13+) API to cleanly register `/Applications/KeyHUD.app` as a login item without legacy AppleScript or helper daemons.
-  - [ ] Provide fallback LaunchAgent plist generation (`~/Library/LaunchAgents/com.ablack.KeyHUD.plist`) if `SMAppService` status requires user approval or older subsystem fallback.
-  - [ ] Add a prominent "Launch at Login" toggle switch in Settings under the **General** tab.
-  - [ ] Sync the toggle state with the real-time system registration status (`SMAppService.mainApp.status == .enabled`).
-  - [ ] Show status feedback if macOS requires granting background approval in System Settings → General → Login Items.
+- [x] **Launch at Login / Boot (Start on Boot)**
+  - [x] Implement `SMAppService.mainApp` (macOS 13+) API to cleanly register `/Applications/KeyHUD.app` as a login item without legacy AppleScript or helper daemons.
+  - [x] Provide fallback LaunchAgent plist generation (`~/Library/LaunchAgents/com.ablack.KeyHUD.plist`) if `SMAppService` status requires user approval or older subsystem fallback.
+  - [x] Add a prominent "Launch at Login" toggle switch in Settings under the **General** tab.
+  - [x] Sync the toggle state with the real-time system registration status (`SMAppService.mainApp.status == .enabled`).
