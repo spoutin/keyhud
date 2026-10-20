@@ -125,3 +125,29 @@
   - [x] Provide fallback LaunchAgent plist generation (`~/Library/LaunchAgents/com.ablack.KeyHUD.plist`) if `SMAppService` status requires user approval or older subsystem fallback.
   - [x] Add a prominent "Launch at Login" toggle switch in Settings under the **General** tab.
   - [x] Sync the toggle state with the real-time system registration status (`SMAppService.mainApp.status == .enabled`).
+
+---
+
+## 🔮 Future Roadmap (Feature Ideas from Market Alternatives)
+
+- [ ] **Hide Known / Muscle-Memory Shortcuts**
+  - [ ] Add an "Eye" / "Hide" action on shortcuts to mark them as known/hidden.
+  - [ ] Toggle in HUD header or Settings to show/hide known shortcuts (`⌘C`, `⌘V`, `⌘Z`, `⌘Q`, etc.) to dramatically cut visual clutter.
+  - [ ] Manage hidden shortcuts list in Settings under Shortcuts & Editor.
+
+- [ ] **Universal Command Palette Mode (Paletro-style)**
+  - [ ] Option to index all menu bar items (including those without keyboard shortcuts) in `MenuScanner`.
+  - [ ] Search query matches full application actions (e.g. "Export As...", "Format > Paragraph").
+  - [ ] Press `Enter` or click to execute actions directly via Accessibility API (`AXUIElementPerformAction`).
+
+- [ ] **App Ignore / Blacklist**
+  - [ ] Add an "Ignored Applications" list in Settings under General (e.g. for full-screen games, VMs, remote desktop/VNC).
+  - [ ] Prevent `HotKeyManager` Command-hold/tap listeners from triggering the HUD when an ignored app is frontmost.
+
+- [ ] **macOS Trackpad & Mouse Gestures Reference**
+  - [ ] Dedicated Gestures tab or scope in HUD header (3-finger drag, Space switching, Smart Zoom, Mission Control, Force Click).
+  - [ ] Visual SF Symbol icons for finger gestures and motion directions.
+
+- [ ] **Interactive Keyboard Layout / Modifier Heatmap (KeyCue-style)**
+  - [ ] Mini visual keyboard layout view showing which physical keys are occupied or free for the active modifier combination.
+  - [ ] Useful for discovering available keys when authoring custom shortcuts.
