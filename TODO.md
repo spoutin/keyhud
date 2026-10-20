@@ -57,6 +57,12 @@
   - [x] Add configuration controls in Settings (under Shortcuts & Editor) to choose which TUI tools appear on the "Main" Ghostty page versus remaining exclusively in the sub-menu.
   - [x] Allow adding custom CLI/TUI tool categories and keybindings in the Keybinding Editor under terminal tools.
 
+- [x] **Adjustable Search Scope (Current, Current + Sub-tools, All / Global)**
+  - [x] Search scope modes (`Current View`, `Current + Sub-tools`, `All / Global`).
+  - [x] Interactive scope selector button beside search textfield in the HUD view.
+  - [x] Configurable default search scope setting in Settings under General tab.
+  - [x] Full 2D navigation and execute across all matched multi-scope shortcut results.
+
 ---
 
 ## 🚀 Medium Priority

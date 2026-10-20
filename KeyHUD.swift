@@ -1694,10 +1694,40 @@ struct HUDView: View {
 
                 Spacer()
 
-                // Search Field Container
+                // Search Field Container with Scope Filter Button
                 HStack(spacing: 6) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundColor(.gray)
+                    // Search Scope Menu Button
+                    Menu {
+                        ForEach(SearchScope.allCases) { scope in
+                            Button(action: {
+                                searchState.activeSearchScope = scope
+                            }) {
+                                HStack {
+                                    Image(systemName: scope.icon)
+                                    Text(scope.rawValue)
+                                    if searchState.activeSearchScope == scope {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 3) {
+                            Image(systemName: searchState.activeSearchScope.icon)
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(accent)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundColor(Color.white.opacity(0.6))
+                        }
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 3)
+                        .background(Color.white.opacity(0.10))
+                        .cornerRadius(5)
+                    }
+                    .menuStyle(BorderlessButtonMenuStyle())
+                    .help("Search Scope: \(searchState.activeSearchScope.rawValue)")
+
                     SearchBarView(
                         text: $searchState.query,
                         onMoveDown: moveSelectionDown,
@@ -1717,11 +1747,11 @@ struct HUDView: View {
                         .buttonStyle(PlainButtonStyle())
                     }
                 }
-                .padding(.horizontal, 10)
+                .padding(.horizontal, 8)
                 .padding(.vertical, 5)
                 .background(Color.white.opacity(0.12))
                 .cornerRadius(8)
-                .frame(width: 420)
+                .frame(width: 440)
 
                 // Pin Button
                 Button(action: {
@@ -2099,6 +2129,8 @@ class HUDWindowController: NSWindowController {
 
         currentTargetApp = validApp
         searchState.query = ""
+        let defaultScope = SearchScope(rawValue: AppSettings.shared.defaultSearchScope) ?? .current
+        searchState.activeSearchScope = defaultScope
 
         let bundleID = validApp.bundleIdentifier ?? ""
         let appName = validApp.localizedName ?? "Application"
@@ -2990,6 +3022,43 @@ struct SettingsView: View {
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 2)
+                }
+                .padding(14)
+                .background(Color(NSColor.controlBackgroundColor))
+                .cornerRadius(8)
+
+                // Search Scope Preferences Section
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("DEFAULT SEARCH SCOPE")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.secondary)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(SearchScope.allCases) { scope in
+                            Button(action: {
+                                settings.defaultSearchScope = scope.rawValue
+                            }) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: settings.defaultSearchScope == scope.rawValue ? "largecircle.fill.circle" : "circle")
+                                        .foregroundColor(settings.defaultSearchScope == scope.rawValue ? settings.currentAccentColor : .secondary)
+                                        .font(.system(size: 13))
+                                    Image(systemName: scope.icon)
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.secondary)
+                                    Text(scope.rawValue)
+                                        .font(.system(size: 13, weight: settings.defaultSearchScope == scope.rawValue ? .semibold : .regular))
+                                        .foregroundColor(.primary)
+                                    Spacer()
+                                }
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    }
+
+                    Text("Determines what categories are queried when typing in the HUD search bar. Can also be toggled on the fly in the HUD.")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
                         .padding(.top, 2)
                 }
                 .padding(14)
