@@ -154,7 +154,24 @@ class AppSettings: ObservableObject {
             _ = LaunchAtLoginManager.shared.setEnabled(launchAtLogin)
         }
     }
+    @Published var ghosttyHiddenCategories: Set<String> {
+        didSet {
+            UserDefaults.standard.set(Array(ghosttyHiddenCategories), forKey: "ghosttyHiddenCategories")
+        }
+    }
     @Published var selectedSettingsTab: String = SettingsTab.general.rawValue
+
+    func isGhosttyCategoryShownOnMain(_ name: String) -> Bool {
+        return !ghosttyHiddenCategories.contains(name)
+    }
+
+    func toggleGhosttyCategoryOnMain(_ name: String) {
+        if ghosttyHiddenCategories.contains(name) {
+            ghosttyHiddenCategories.remove(name)
+        } else {
+            ghosttyHiddenCategories.insert(name)
+        }
+    }
 
     var currentAccentColor: Color {
         AccentTheme(rawValue: accentTheme)?.color ?? AccentTheme.cyan.color
@@ -192,6 +209,9 @@ class AppSettings: ObservableObject {
 
         self.isPinned = UserDefaults.standard.bool(forKey: "isPinned")
         self.launchAtLogin = LaunchAtLoginManager.shared.isEnabled
+
+        let savedHidden = UserDefaults.standard.stringArray(forKey: "ghosttyHiddenCategories") ?? []
+        self.ghosttyHiddenCategories = Set(savedHidden)
     }
 }
 
@@ -2193,10 +2213,34 @@ struct KeybindingEditorView: View {
                         ForEach(state.currentCategories, id: \.self) { category in
                             VStack(alignment: .leading, spacing: 10) {
                                 // Category Header
-                                HStack {
+                                HStack(spacing: 10) {
                                     Text(category.uppercased())
                                         .font(.system(size: 11, weight: .bold))
                                         .foregroundColor(accent)
+
+                                    if state.selectedBundleID == "com.mitchellh.ghostty" {
+                                        let isShownOnMain = settings.isGhosttyCategoryShownOnMain(category)
+                                        Button(action: {
+                                            settings.toggleGhosttyCategoryOnMain(category)
+                                        }) {
+                                            HStack(spacing: 4) {
+                                                Image(systemName: isShownOnMain ? "checkmark.circle.fill" : "circle")
+                                                    .foregroundColor(isShownOnMain ? Color.green : .secondary)
+                                                    .font(.system(size: 11))
+                                                Text(isShownOnMain ? "Shown on Main" : "Sub-menu Only")
+                                                    .font(.system(size: 10, weight: .medium))
+                                                    .foregroundColor(isShownOnMain ? .primary : .secondary)
+                                            }
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 4)
+                                                    .fill(isShownOnMain ? Color.green.opacity(0.12) : Color.white.opacity(0.06))
+                                            )
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
+                                        .help("Toggle whether this category appears on Ghostty's main combined cheatsheet")
+                                    }
 
                                     Spacer()
 
