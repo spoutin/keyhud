@@ -403,12 +403,7 @@ struct KeyComboDecoder {
     static func decode(flags: NSEvent.ModifierFlags, keyCode: UInt16) -> (result: String?, isCancel: Bool, isClear: Bool) {
         let cleanFlags = flags.intersection(.deviceIndependentFlagsMask)
 
-        // Bare escape cancels
-        if cleanFlags.isEmpty && Int(keyCode) == kVK_Escape {
-            return (nil, true, false)
-        }
-
-        // Bare delete/backspace clears
+        // Bare delete/backspace clears / deletes last token
         if cleanFlags.isEmpty && (Int(keyCode) == kVK_Delete || Int(keyCode) == kVK_ForwardDelete) {
             return ("", false, true)
         }
