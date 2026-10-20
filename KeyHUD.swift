@@ -913,6 +913,7 @@ class EditorState: ObservableObject {
     @Published var recordingCategory: String? = nil
     @Published var recordingIndex: Int? = nil
     @Published var recordingVariantIndex: Int? = nil
+    @Published var recordingSequence: [String] = []
     @Published var liveModifiers: String = ""
 
     var isRecording: Bool {
@@ -924,6 +925,7 @@ class EditorState: ObservableObject {
         recordingCategory = category
         recordingIndex = index
         recordingVariantIndex = variantIndex
+        recordingSequence = []
         liveModifiers = ""
     }
 
@@ -931,7 +933,33 @@ class EditorState: ObservableObject {
         recordingCategory = nil
         recordingIndex = nil
         recordingVariantIndex = nil
+        recordingSequence = []
         liveModifiers = ""
+    }
+
+    func removeLastRecordedToken() {
+        if !recordingSequence.isEmpty {
+            recordingSequence.removeLast()
+        }
+    }
+
+    func commitRecording() {
+        guard let cat = recordingCategory, let idx = recordingIndex else { return }
+        let currentTitle = config[selectedBundleID]?[cat]?[idx]["title"] ?? ""
+        let currentRawKeys = config[selectedBundleID]?[cat]?[idx]["keys"] ?? ""
+        var variants = currentRawKeys.split(separator: "/").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+
+        if !recordingSequence.isEmpty {
+            let combo = recordingSequence.joined()
+            if let vIdx = recordingVariantIndex, vIdx < variants.count {
+                variants[vIdx] = combo
+            } else {
+                variants.append(combo)
+            }
+            updateShortcut(category: cat, index: idx, title: currentTitle, keys: variants.joined(separator: " / "))
+        }
+
+        stopRecording()
     }
 
     func updateLiveModifiers(flags: NSEvent.ModifierFlags) {
@@ -948,7 +976,7 @@ class EditorState: ObservableObject {
     }
 
     func handleRecordedKey(flags: NSEvent.ModifierFlags, keyCode: UInt16) -> Bool {
-        guard let cat = recordingCategory, let idx = recordingIndex else { return false }
+        guard isRecording else { return false }
         let (result, isCancel, isClear) = KeyComboDecoder.decode(flags: flags, keyCode: keyCode)
 
         if isCancel {
@@ -956,29 +984,14 @@ class EditorState: ObservableObject {
             return true
         }
 
-        let currentTitle = config[selectedBundleID]?[cat]?[idx]["title"] ?? ""
-        let currentRawKeys = config[selectedBundleID]?[cat]?[idx]["keys"] ?? ""
-        var variants = currentRawKeys.split(separator: "/").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-
         if isClear {
-            if let vIdx = recordingVariantIndex, vIdx < variants.count {
-                variants.remove(at: vIdx)
-            } else {
-                variants.removeAll()
-            }
-            updateShortcut(category: cat, index: idx, title: currentTitle, keys: variants.joined(separator: " / "))
-            stopRecording()
+            removeLastRecordedToken()
             return true
         }
 
-        if let combo = result {
-            if let vIdx = recordingVariantIndex, vIdx < variants.count {
-                variants[vIdx] = combo
-            } else {
-                variants.append(combo)
-            }
-            updateShortcut(category: cat, index: idx, title: currentTitle, keys: variants.joined(separator: " / "))
-            stopRecording()
+        if let stroke = result {
+            recordingSequence.append(stroke)
+            liveModifiers = ""
             return true
         }
 
@@ -2922,13 +2935,29 @@ struct RecordingBadgeView: View {
     @ObservedObject var state: EditorState
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 7) {
             Circle().fill(Color.red).frame(width: 8, height: 8)
-            if state.liveModifiers.isEmpty {
-                Text("Type shortcut...")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(.white)
-            } else {
+
+            // Accumulated sequence tokens
+            if !state.recordingSequence.isEmpty {
+                HStack(spacing: 3) {
+                    ForEach(Array(state.recordingSequence.enumerated()), id: \.offset) { _, stroke in
+                        let tokens = KeyTokenParser.parse(stroke)
+                        ForEach(Array(tokens.enumerated()), id: \.offset) { _, t in
+                            Text(t.text)
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .foregroundColor(t.color)
+                                .background(RoundedRectangle(cornerRadius: 4).fill(t.color.opacity(0.22)))
+                                .overlay(RoundedRectangle(cornerRadius: 4).stroke(t.color.opacity(0.5), lineWidth: 1))
+                        }
+                    }
+                }
+            }
+
+            // Live held modifiers
+            if !state.liveModifiers.isEmpty {
                 let liveTokens = KeyTokenParser.parse(state.liveModifiers)
                 HStack(spacing: 3) {
                     ForEach(Array(liveTokens.enumerated()), id: \.offset) { _, token in
@@ -2944,17 +2973,50 @@ struct RecordingBadgeView: View {
                         .font(.system(size: 11, weight: .bold))
                         .foregroundColor(.white.opacity(0.7))
                 }
+            } else if state.recordingSequence.isEmpty {
+                Text("Type keys...")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.white)
             }
 
+            // Backspace icon to undo last stroke
+            if !state.recordingSequence.isEmpty {
+                Button(action: { state.removeLastRecordedToken() }) {
+                    Image(systemName: "delete.left")
+                        .font(.system(size: 11))
+                        .foregroundColor(.white.opacity(0.75))
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help("Delete last stroke (⌫)")
+            }
+
+            // Prominent Green Done button to finish via mouse click
+            Button(action: { state.commitRecording() }) {
+                HStack(spacing: 3) {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 10, weight: .bold))
+                    Text("Done")
+                        .font(.system(size: 11, weight: .bold))
+                }
+                .foregroundColor(.black)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Color.green)
+                .cornerRadius(5)
+            }
+            .buttonStyle(PlainButtonStyle())
+            .help("Click to finish recording")
+
+            // Cancel button
             Button(action: { state.stopRecording() }) {
                 Image(systemName: "xmark.circle.fill")
                     .foregroundColor(.white.opacity(0.7))
-                    .font(.system(size: 11))
+                    .font(.system(size: 12))
             }
             .buttonStyle(PlainButtonStyle())
             .help("Cancel recording (Esc)")
         }
-        .padding(.horizontal, 9)
+        .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .background(RoundedRectangle(cornerRadius: 6).fill(Color.red.opacity(0.18)))
         .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.red.opacity(0.6), lineWidth: 1.2))
