@@ -1523,54 +1523,68 @@ struct ShortcutRow: View {
     let item: ShortcutItem
     let isSelected: Bool
     let isHovered: Bool
+    let isBookmarked: Bool
     let accentColor: Color
     let onSelect: () -> Void
+    let onToggleBookmark: () -> Void
     let onHover: (Bool) -> Void
 
     var body: some View {
         let tokens = KeyTokenParser.parse(item.keys)
 
-        Button(action: onSelect) {
-            HStack(alignment: .center, spacing: 4) {
-                Text(item.title)
-                    .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
-                    .foregroundColor(isSelected ? .white : (isHovered ? .white : .white.opacity(0.88)))
-                    .lineLimit(1)
+        HStack(spacing: 0) {
+            Button(action: onSelect) {
+                HStack(alignment: .center, spacing: 6) {
+                    // Bookmark Star Icon Button
+                    Button(action: onToggleBookmark) {
+                        Image(systemName: isBookmarked ? "star.fill" : "star")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(isBookmarked ? Color.yellow : Color.white.opacity(isHovered ? 0.35 : 0.0))
+                            .frame(width: 14, height: 14)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .help(isBookmarked ? "Remove from Favorites" : "Add to Favorites")
 
-                Spacer(minLength: 8)
+                    Text(item.title)
+                        .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
+                        .foregroundColor(isSelected ? .white : (isHovered ? .white : .white.opacity(0.88)))
+                        .lineLimit(1)
 
-                // Distinct Key Token Badges
-                HStack(spacing: 3) {
-                    ForEach(Array(tokens.enumerated()), id: \.offset) { _, token in
-                        Text(token.text)
-                            .font(.system(size: token.isSpecial ? 11 : 10, weight: .bold, design: .monospaced))
-                            .padding(.horizontal, token.isSpecial ? 5 : 4)
-                            .padding(.vertical, 2)
-                            .foregroundColor(isSelected ? .black : token.color)
-                            .background(
-                                RoundedRectangle(cornerRadius: 4)
-                                    .fill(isSelected ? token.color : (token.isSpecial ? token.color.opacity(0.18) : Color.white.opacity(0.12)))
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 4)
-                                    .stroke(isSelected ? Color.clear : (token.isSpecial ? token.color.opacity(0.40) : Color.white.opacity(0.20)), lineWidth: 0.75)
-                            )
+                    Spacer(minLength: 8)
+
+                    // Distinct Key Token Badges
+                    HStack(spacing: 3) {
+                        ForEach(Array(tokens.enumerated()), id: \.offset) { _, token in
+                            Text(token.text)
+                                .font(.system(size: token.isSpecial ? 11 : 10, weight: .bold, design: .monospaced))
+                                .padding(.horizontal, token.isSpecial ? 5 : 4)
+                                .padding(.vertical, 2)
+                                .foregroundColor(isSelected ? .black : token.color)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 4)
+                                        .fill(isSelected ? token.color : (token.isSpecial ? token.color.opacity(0.18) : Color.white.opacity(0.12)))
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 4)
+                                        .stroke(isSelected ? Color.clear : (token.isSpecial ? token.color.opacity(0.40) : Color.white.opacity(0.20)), lineWidth: 0.75)
+                                )
+                        }
                     }
                 }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(isSelected ? accentColor.opacity(0.25) : (isBookmarked ? Color.yellow.opacity(0.06) : (isHovered ? Color.white.opacity(0.08) : Color.white.opacity(0.03))))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(isSelected ? accentColor.opacity(0.85) : (isHovered ? accentColor.opacity(0.35) : (isBookmarked ? Color.yellow.opacity(0.25) : Color.clear)), lineWidth: 1.2)
+                )
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(isSelected ? accentColor.opacity(0.25) : (isHovered ? Color.white.opacity(0.08) : Color.white.opacity(0.03)))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .stroke(isSelected ? accentColor.opacity(0.85) : (isHovered ? accentColor.opacity(0.35) : Color.clear), lineWidth: 1.5)
-            )
-            .contentShape(Rectangle())
+            .buttonStyle(PlainButtonStyle())
         }
-        .buttonStyle(PlainButtonStyle())
         .onHover { hovering in
             onHover(hovering)
         }
@@ -1676,13 +1690,29 @@ struct HUDView: View {
 
     @ObservedObject var searchState: SearchState
     @ObservedObject var settings = AppSettings.shared
+    @ObservedObject var favorites = FavoritesManager.shared
 
     var appName: String { viewModel.appName }
     var bundleID: String { viewModel.bundleID }
     var appIcon: NSImage? { viewModel.appIcon }
     var groups: [ShortcutGroup] { viewModel.groups }
 
-    var currentScopeGroups: [ShortcutGroup] {
+    var currentScopeStorageKey: String {
+        switch searchState.selectedScope {
+        case .activeApp:
+            return bundleID
+        case .ghosttyTool(let category):
+            return "ghostty:\(category)"
+        case .runningApp(let bID, _, _):
+            return bID
+        case .aerospace:
+            return "aerospace"
+        case .macos:
+            return "macos"
+        }
+    }
+
+    var rawScopeGroups: [ShortcutGroup] {
         switch searchState.selectedScope {
         case .activeApp:
             if bundleID == "com.mitchellh.ghostty" {
@@ -1711,11 +1741,54 @@ struct HUDView: View {
         }
     }
 
+    var currentScopeGroups: [ShortcutGroup] {
+        let baseGroups = rawScopeGroups
+        let key = currentScopeStorageKey
+        let bookmarkedTitles = favorites.bookmarks(for: key)
+
+        if bookmarkedTitles.isEmpty {
+            return baseGroups
+        }
+
+        var favItems: [ShortcutItem] = []
+        var seenTitles = Set<String>()
+        for grp in baseGroups {
+            for item in grp.items {
+                if bookmarkedTitles.contains(item.title) && !seenTitles.contains(item.title) {
+                    favItems.append(item)
+                    seenTitles.insert(item.title)
+                }
+            }
+        }
+
+        if favItems.isEmpty {
+            return baseGroups
+        }
+
+        let favGroup = ShortcutGroup(title: "⭐ Favorites", items: favItems)
+        return [favGroup] + baseGroups
+    }
+
     var searchableGroups: [ShortcutGroup] {
         switch searchState.activeSearchScope {
         case .current:
             return currentScopeGroups
         case .currentAndSubApps:
+            let key = currentScopeStorageKey
+            let bookmarkedTitles = favorites.bookmarks(for: key)
+            if !bookmarkedTitles.isEmpty {
+                var favItems: [ShortcutItem] = []
+                for grp in groups {
+                    for item in grp.items {
+                        if bookmarkedTitles.contains(item.title) && !favItems.contains(where: { $0.title == item.title }) {
+                            favItems.append(item)
+                        }
+                    }
+                }
+                if !favItems.isEmpty {
+                    return [ShortcutGroup(title: "⭐ Favorites", items: favItems)] + groups
+                }
+            }
             return groups
         case .global:
             var all = groups
@@ -2185,7 +2258,7 @@ struct HUDView: View {
                                 VStack(alignment: .leading, spacing: 8) {
                                     Text(group.title.uppercased())
                                         .font(.system(size: 11, weight: .bold))
-                                        .foregroundColor(accent)
+                                        .foregroundColor(group.title.contains("Favorites") ? Color.yellow : accent)
                                         .padding(.bottom, 2)
 
                                     ScrollView(.vertical, showsIndicators: true) {
@@ -2193,11 +2266,13 @@ struct HUDView: View {
                                             ForEach(Array(group.items.enumerated()), id: \.element.id) { itemIndex, item in
                                                 let isSelected = (currentGroupIndex == groupIndex && currentItemIndex == itemIndex)
                                                 let isHovered = (searchState.hoveredItemId == item.id)
+                                                let isBookmarked = favorites.isBookmarked(scopeKey: currentScopeStorageKey, title: item.title)
 
                                                 ShortcutRow(
                                                     item: item,
                                                     isSelected: isSelected,
                                                     isHovered: isHovered,
+                                                    isBookmarked: isBookmarked,
                                                     accentColor: accent,
                                                     onSelect: {
                                                         searchState.selectedGroupIndex = groupIndex
@@ -2207,6 +2282,10 @@ struct HUDView: View {
                                                         } else {
                                                             onExecute(item)
                                                         }
+                                                    },
+                                                    onToggleBookmark: {
+                                                        favorites.toggleBookmark(scopeKey: currentScopeStorageKey, title: item.title)
+                                                        HUDWindowController.shared.applyScreenPercentageFrame(groups: currentScopeGroups)
                                                     },
                                                     onHover: { hovering in
                                                         searchState.hoveredItemId = hovering ? item.id : nil

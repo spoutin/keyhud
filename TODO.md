@@ -101,9 +101,12 @@
   - [x] Shortcut-Only mode (`⌘⇧/ Only`) to disable all Command tap/hold modifier interception.
   - [x] Real-time millisecond readout on the slider.
 
-- [ ] **Bookmarks & Favorites**
-  - [ ] Star icon next to shortcuts to mark them as favorites.
-  - [ ] Pinned "Favorites" section or top-of-column highlighting for bookmarked items.
+- [x] **Bookmarks & Favorites**
+  - [x] Star icon next to shortcuts to mark them as favorites (subtle outline on hover, vibrant filled gold star when bookmarked).
+  - [x] Dedicated "⭐ Favorites" column pinned at the top-left of the HUD for the active app/tool whenever favorites exist.
+  - [x] In-place gold star badge and delicate accent tint on bookmarked items in their original categories.
+  - [x] Unstarring items automatically updates the UI and smoothly collapses the favorites group when empty.
+  - [x] Persistent storage in `UserDefaults` across restarts per scope / app.
 
 ---
 
