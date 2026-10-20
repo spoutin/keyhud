@@ -115,8 +115,10 @@
 
 ## 📦 Low Priority / Nice-to-Have
 
-- [ ] **Export to Markdown**
-  - [ ] Button in header to export the current cheatsheet as a formatted `.md` file in `~/Documents`.
+- [x] **Export to Markdown**
+  - [x] Dedicated export button (`square.and.arrow.up`) in the HUD toolbar.
+  - [x] "Copy Markdown to Clipboard" formats clean GitHub-flavored tables for pasting into notes or wikis.
+  - [x] "Save to Documents" creates `~/Documents/KeyHUD/<app>-shortcuts.md` and reveals the file in Finder.
 
 - [x] **Launch at Login / Boot (Start on Boot)**
   - [x] Implement `SMAppService.mainApp` (macOS 13+) API to cleanly register `/Applications/KeyHUD.app` as a login item without legacy AppleScript or helper daemons.
