@@ -1422,11 +1422,65 @@ struct ShortcutRow: View {
     }
 }
 
+// MARK: - Smart Fuzzy Matcher
+
+struct FuzzyMatcher {
+    static func matches(pattern: String, target: String) -> Bool {
+        if pattern.isEmpty { return true }
+        let pLower = pattern.lowercased()
+        let tLower = target.lowercased()
+
+        // Quick check for consecutive substring
+        if tLower.contains(pLower) { return true }
+
+        var pIdx = pLower.startIndex
+        var tIdx = tLower.startIndex
+
+        while pIdx < pLower.endIndex && tIdx < tLower.endIndex {
+            if pLower[pIdx] == tLower[tIdx] {
+                pIdx = pLower.index(after: pIdx)
+            }
+            tIdx = tLower.index(after: tIdx)
+        }
+
+        return pIdx == pLower.endIndex
+    }
+
+    static func score(pattern: String, target: String) -> Int? {
+        if pattern.isEmpty { return 0 }
+        let pLower = pattern.lowercased()
+        let tLower = target.lowercased()
+
+        var pIdx = pLower.startIndex
+        var tIdx = tLower.startIndex
+        var score = 0
+        var consecutive = 0
+
+        if tLower.hasPrefix(pLower) {
+            score += 50
+        }
+
+        while pIdx < pLower.endIndex && tIdx < tLower.endIndex {
+            if pLower[pIdx] == tLower[tIdx] {
+                score += 10 + (consecutive * 6)
+                consecutive += 1
+                pIdx = pLower.index(after: pIdx)
+            } else {
+                consecutive = 0
+            }
+            tIdx = tLower.index(after: tIdx)
+        }
+
+        return pIdx == pLower.endIndex ? score : nil
+    }
+}
+
 // MARK: - HUD Scope Enum
 
 enum HUDScope: Hashable, Identifiable {
     case activeApp
     case ghosttyTool(category: String)
+    case runningApp(bundleID: String, name: String, icon: NSImage)
     case aerospace
     case macos
 
@@ -1434,6 +1488,7 @@ enum HUDScope: Hashable, Identifiable {
         switch self {
         case .activeApp: return "activeApp"
         case .ghosttyTool(let category): return "ghostty:\(category)"
+        case .runningApp(let bundleID, _, _): return "running:\(bundleID)"
         case .aerospace: return "aerospace"
         case .macos: return "macos"
         }
@@ -1443,6 +1498,7 @@ enum HUDScope: Hashable, Identifiable {
         switch self {
         case .activeApp: return "Active App"
         case .ghosttyTool(let category): return category
+        case .runningApp(_, let name, _): return name
         case .aerospace: return "AeroSpace Tiling"
         case .macos: return "macOS System"
         }
@@ -1472,6 +1528,18 @@ struct HUDView: View {
             return groups
         case .ghosttyTool(let catName):
             return groups.filter { $0.title == catName }
+        case .runningApp(let bID, _, _):
+            // Load custom shortcuts or scanned menus for this running app
+            var appGroups = CustomShortcutsManager.shared.groups(for: bID) ?? []
+            if let running = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == bID }) {
+                let scanned = MenuScanner.scan(app: running)
+                for sc in scanned {
+                    if !appGroups.contains(where: { $0.title == sc.title }) {
+                        appGroups.append(sc)
+                    }
+                }
+            }
+            return appGroups
         case .aerospace:
             return AeroSpaceConfigParser.parse()
         case .macos:
@@ -1502,13 +1570,13 @@ struct HUDView: View {
     }
 
     var filteredGroups: [ShortcutGroup] {
-        let q = searchState.query.trimmingCharacters(in: .whitespaces).lowercased()
+        let q = searchState.query.trimmingCharacters(in: .whitespaces)
         if q.isEmpty {
             return currentScopeGroups
         }
         return searchableGroups.compactMap { group in
             let filteredItems = group.items.filter {
-                $0.title.lowercased().contains(q) || $0.keys.lowercased().contains(q)
+                FuzzyMatcher.matches(pattern: q, target: $0.title) || FuzzyMatcher.matches(pattern: q, target: $0.keys)
             }
             return filteredItems.isEmpty ? nil : ShortcutGroup(title: group.title, items: filteredItems)
         }
@@ -1650,6 +1718,13 @@ struct HUDView: View {
                                 .font(.system(size: 15, weight: .bold))
                                 .foregroundColor(accent)
                             Text("Ghostty: \(catName)")
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundColor(.white)
+                        case .runningApp(_, let name, let icon):
+                            Image(nsImage: icon)
+                                .resizable()
+                                .frame(width: 20, height: 20)
+                            Text(name)
                                 .font(.system(size: 15, weight: .bold))
                                 .foregroundColor(.white)
                         case .aerospace:
