@@ -918,6 +918,7 @@ class EditorState: ObservableObject {
     @Published var recordingCategory: String? = nil
     @Published var recordingIndex: Int? = nil
     @Published var recordingVariantIndex: Int? = nil
+    @Published var liveModifiers: String = ""
 
     var isRecording: Bool {
         recordingCategory != nil && recordingIndex != nil
@@ -927,12 +928,27 @@ class EditorState: ObservableObject {
         recordingCategory = category
         recordingIndex = index
         recordingVariantIndex = variantIndex
+        liveModifiers = ""
     }
 
     func stopRecording() {
         recordingCategory = nil
         recordingIndex = nil
         recordingVariantIndex = nil
+        liveModifiers = ""
+    }
+
+    func updateLiveModifiers(flags: NSEvent.ModifierFlags) {
+        guard isRecording else { return }
+        let clean = flags.intersection(.deviceIndependentFlagsMask)
+        var s = ""
+        if clean.contains(.control) { s += "⌃" }
+        if clean.contains(.option) { s += "⌥" }
+        if clean.contains(.shift) { s += "⇧" }
+        if clean.contains(.command) { s += "⌘" }
+        if liveModifiers != s {
+            liveModifiers = s
+        }
     }
 
     func handleRecordedKey(flags: NSEvent.ModifierFlags, keyCode: UInt16) -> Bool {
@@ -2904,6 +2920,51 @@ class HUDWindowController: NSWindowController {
     }
 }
 
+// MARK: - Live Recording Badge View
+
+struct RecordingBadgeView: View {
+    @ObservedObject var state: EditorState
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle().fill(Color.red).frame(width: 8, height: 8)
+            if state.liveModifiers.isEmpty {
+                Text("Type shortcut...")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.white)
+            } else {
+                let liveTokens = KeyTokenParser.parse(state.liveModifiers)
+                HStack(spacing: 3) {
+                    ForEach(Array(liveTokens.enumerated()), id: \.offset) { _, token in
+                        Text(token.text)
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .foregroundColor(token.color)
+                            .background(RoundedRectangle(cornerRadius: 4).fill(token.color.opacity(0.25)))
+                            .overlay(RoundedRectangle(cornerRadius: 4).stroke(token.color.opacity(0.6), lineWidth: 1))
+                    }
+                    Text("...")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.white.opacity(0.7))
+                }
+            }
+
+            Button(action: { state.stopRecording() }) {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundColor(.white.opacity(0.7))
+                    .font(.system(size: 11))
+            }
+            .buttonStyle(PlainButtonStyle())
+            .help("Cancel recording (Esc)")
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 4)
+        .background(RoundedRectangle(cornerRadius: 6).fill(Color.red.opacity(0.18)))
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.red.opacity(0.6), lineWidth: 1.2))
+    }
+}
+
 // MARK: - Keybinding Editor View & Window Controller
 
 struct KeybindingEditorView: View {
@@ -3178,18 +3239,7 @@ struct KeybindingEditorView: View {
                                             if variants.isEmpty {
                                                 let isRecordingThisEmpty = (state.recordingCategory == category && state.recordingIndex == index)
                                                 if isRecordingThisEmpty {
-                                                    // Active Recording Indicator Pill
-                                                    HStack(spacing: 6) {
-                                                        Circle().fill(Color.red).frame(width: 8, height: 8)
-                                                        Text("Type shortcut...").font(.system(size: 11, weight: .bold)).foregroundColor(.white)
-                                                        Button(action: { state.stopRecording() }) {
-                                                            Image(systemName: "xmark.circle.fill").foregroundColor(.white.opacity(0.7)).font(.system(size: 11))
-                                                        }
-                                                        .buttonStyle(PlainButtonStyle())
-                                                    }
-                                                    .padding(.horizontal, 10).padding(.vertical, 5)
-                                                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.red.opacity(0.18)))
-                                                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.red.opacity(0.6), lineWidth: 1.2))
+                                                    RecordingBadgeView(state: state)
                                                 } else {
                                                     Button(action: {
                                                         state.startRecording(category: category, index: index, variantIndex: 0)
@@ -3222,18 +3272,7 @@ struct KeybindingEditorView: View {
                                                     let isRecordingThisVariant = (state.recordingCategory == category && state.recordingIndex == index && state.recordingVariantIndex == vIdx)
 
                                                     if isRecordingThisVariant {
-                                                        // Active Recording Indicator Pill
-                                                        HStack(spacing: 6) {
-                                                            Circle().fill(Color.red).frame(width: 8, height: 8)
-                                                            Text("Type shortcut...").font(.system(size: 11, weight: .bold)).foregroundColor(.white)
-                                                            Button(action: { state.stopRecording() }) {
-                                                                Image(systemName: "xmark.circle.fill").foregroundColor(.white.opacity(0.7)).font(.system(size: 11))
-                                                            }
-                                                            .buttonStyle(PlainButtonStyle())
-                                                        }
-                                                        .padding(.horizontal, 8).padding(.vertical, 4)
-                                                        .background(RoundedRectangle(cornerRadius: 6).fill(Color.red.opacity(0.18)))
-                                                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.red.opacity(0.6), lineWidth: 1.2))
+                                                        RecordingBadgeView(state: state)
                                                     } else {
                                                         HStack(spacing: 4) {
                                                             // Colored tokens for this variant
@@ -3285,17 +3324,7 @@ struct KeybindingEditorView: View {
                                                 // Check if currently recording a new alternate
                                                 let isRecordingNewAlternate = (state.recordingCategory == category && state.recordingIndex == index && state.recordingVariantIndex == nil)
                                                 if isRecordingNewAlternate {
-                                                    HStack(spacing: 6) {
-                                                        Circle().fill(Color.red).frame(width: 8, height: 8)
-                                                        Text("Type shortcut...").font(.system(size: 11, weight: .bold)).foregroundColor(.white)
-                                                        Button(action: { state.stopRecording() }) {
-                                                            Image(systemName: "xmark.circle.fill").foregroundColor(.white.opacity(0.7)).font(.system(size: 11))
-                                                        }
-                                                        .buttonStyle(PlainButtonStyle())
-                                                    }
-                                                    .padding(.horizontal, 8).padding(.vertical, 4)
-                                                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.red.opacity(0.18)))
-                                                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.red.opacity(0.6), lineWidth: 1.2))
+                                                    RecordingBadgeView(state: state)
                                                 } else {
                                                     // Button to Add New Alternate Variant
                                                     Button(action: {
@@ -4045,6 +4074,14 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
             self?.window?.performClose(nil)
         }
         window.contentView = NSHostingView(rootView: view)
+
+        NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+            guard let self = self, let win = self.window, win.isKeyWindow else { return event }
+            if EditorState.shared.isRecording {
+                EditorState.shared.updateLiveModifiers(flags: event.modifierFlags)
+            }
+            return event
+        }
 
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self = self, let win = self.window, win.isKeyWindow else { return event }
