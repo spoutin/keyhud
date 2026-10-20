@@ -1609,18 +1609,27 @@ enum HUDScope: Hashable, Identifiable {
     }
 }
 
-// MARK: - SwiftUI HUD View
+// MARK: - SwiftUI HUD View Model & View
+
+class HUDViewModel: ObservableObject {
+    @Published var appName: String = ""
+    @Published var bundleID: String = ""
+    @Published var appIcon: NSImage? = nil
+    @Published var groups: [ShortcutGroup] = []
+}
 
 struct HUDView: View {
-    let appName: String
-    let bundleID: String
-    let appIcon: NSImage?
-    let groups: [ShortcutGroup]
+    @ObservedObject var viewModel: HUDViewModel
     let onExecute: (ShortcutItem) -> Void
     let onDismiss: () -> Void
 
     @ObservedObject var searchState: SearchState
     @ObservedObject var settings = AppSettings.shared
+
+    var appName: String { viewModel.appName }
+    var bundleID: String { viewModel.bundleID }
+    var appIcon: NSImage? { viewModel.appIcon }
+    var groups: [ShortcutGroup] { viewModel.groups }
 
     var currentScopeGroups: [ShortcutGroup] {
         switch searchState.selectedScope {
@@ -2255,6 +2264,7 @@ class HUDWindowController: NSWindowController {
     static let shared = HUDWindowController()
     private var eventMonitor: Any?
     private let searchState = SearchState()
+    private let viewModel = HUDViewModel()
     private var currentTargetApp: NSRunningApplication?
 
     init() {
@@ -2281,6 +2291,18 @@ class HUDWindowController: NSWindowController {
         panel.minSize = NSSize(width: 500, height: 350)
 
         super.init(window: panel)
+
+        let hudView = HUDView(
+            viewModel: viewModel,
+            onExecute: { [weak self] item in
+                ActionExecutor.shared.execute(item: item, targetApp: self?.currentTargetApp)
+            },
+            onDismiss: { [weak self] in
+                self?.hide()
+            },
+            searchState: searchState
+        )
+        panel.contentView = NSHostingView(rootView: hudView)
     }
 
     required init?(coder: NSCoder) {
@@ -2318,37 +2340,21 @@ class HUDWindowController: NSWindowController {
             return p
         }
 
-        // 1. If AeroSpace is running, query the focused window's PID so we always match the active workspace
-        let cli = Process()
-        cli.launchPath = "/opt/homebrew/bin/aerospace"
-        cli.arguments = ["list-windows", "--focused", "--format", "%{app-pid}"]
-        let p = Pipe()
-        cli.standardOutput = p
-        if (try? cli.run()) != nil {
-            cli.waitUntilExit()
-            let out = String(data: p.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
-            if let pidStr = out, let pid = Int32(pidStr), let app = NSRunningApplication(processIdentifier: pid) {
-                if app.bundleIdentifier != Bundle.main.bundleIdentifier && app.bundleIdentifier != "com.apple.loginwindow" {
-                    return app
-                }
-            }
-        }
-
-        // 2. macOS frontmost application
+        // 1. macOS frontmost application (< 3ms)
         if let front = NSWorkspace.shared.frontmostApplication,
            front.bundleIdentifier != Bundle.main.bundleIdentifier &&
            front.bundleIdentifier != "com.apple.loginwindow" {
             return front
         }
 
-        // 3. Menu bar owning application
+        // 2. Menu bar owning application
         if let menuBarApp = NSWorkspace.shared.menuBarOwningApplication,
            menuBarApp.bundleIdentifier != Bundle.main.bundleIdentifier &&
            menuBarApp.bundleIdentifier != "com.apple.loginwindow" {
             return menuBarApp
         }
 
-        // 4. Fallback to active regular app
+        // 3. Fallback to active regular app
         return NSWorkspace.shared.runningApplications.first(where: {
             $0.activationPolicy == .regular &&
             $0.bundleIdentifier != Bundle.main.bundleIdentifier &&
@@ -2366,7 +2372,7 @@ class HUDWindowController: NSWindowController {
         if window.isVisible {
             hide()
         } else {
-            show(for: resolveTargetApp(targetApp))
+            show(for: targetApp)
         }
     }
 
@@ -2398,21 +2404,10 @@ class HUDWindowController: NSWindowController {
             }
         }
 
-        let hudView = HUDView(
-            appName: appName,
-            bundleID: bundleID,
-            appIcon: icon,
-            groups: groups,
-            onExecute: { [weak self] item in
-                ActionExecutor.shared.execute(item: item, targetApp: self?.currentTargetApp)
-            },
-            onDismiss: { [weak self] in
-                self?.hide()
-            },
-            searchState: searchState
-        )
-
-        window.contentView = NSHostingView(rootView: hudView)
+        viewModel.appName = appName
+        viewModel.bundleID = bundleID
+        viewModel.appIcon = icon
+        viewModel.groups = groups
 
         applyScreenPercentageFrame()
         AppSettings.shared.updateWindowsAppearance()
