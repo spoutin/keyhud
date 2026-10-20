@@ -2290,6 +2290,43 @@ struct KeybindingEditorView: View {
 
             Divider()
 
+            // Modifier Legend Bar
+            HStack(spacing: 14) {
+                Text("MODIFIERS:")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.secondary)
+                    .padding(.trailing, -4)
+
+                ForEach(modifierLegendItems) { item in
+                    HStack(spacing: 4) {
+                        Text(item.symbol)
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .foregroundColor(item.color)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(
+                                RoundedRectangle(cornerRadius: 3)
+                                    .fill(item.color.opacity(0.18))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 3)
+                                    .stroke(item.color.opacity(0.35), lineWidth: 0.75)
+                            )
+
+                        Text(item.name)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                Spacer()
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 7)
+            .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
+
+            Divider()
+
             // Footer
             HStack {
                 Text("Edits persist to ~/.config/keyhud/custom_shortcuts.json")
@@ -2307,7 +2344,7 @@ struct KeybindingEditorView: View {
                 .keyboardShortcut(.defaultAction)
             }
             .padding(.horizontal, 20)
-            .padding(.vertical, 12)
+            .padding(.vertical, 10)
             .background(Color(NSColor.windowBackgroundColor))
         }
         .frame(minWidth: 650, minHeight: 480)

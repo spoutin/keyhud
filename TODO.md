@@ -45,10 +45,10 @@
   - [x] Instant reactive column grid update without closing or dismissing the HUD.
   - [x] Global shortcut execution via system-level event dispatch.
 
-- [ ] **Unified Modifier Colors & Icon Scheme in Settings & Keybinding Editor**
-  - [ ] Update the modifier insertion pills in the Keybinding Editor (`⌃`, `⌥`, `⇧`, `⌘`, `Space`, `Esc`) to match the HUD's vibrant individual color palette and symbol styling (`⌘` Blue, `⇧` Green, `⌥` Orange, `⌃` Purple, `⎋` Coral/Rose, `␣` Cyan).
-  - [ ] Show real-time colored tokenized badge previews in the shortcut rows within the Keybinding Editor instead of a plain text field alone.
-  - [ ] Add the modifier legend bar to the Keybinding Editor tab in Settings for consistent quick reference.
+- [x] **Unified Modifier Colors & Icon Scheme in Settings & Keybinding Editor**
+  - [x] Update the modifier insertion pills in the Keybinding Editor (`⌃`, `⌥`, `⇧`, `⌘`, `Space`, `Esc`) to match the HUD's vibrant individual color palette and symbol styling (`⌘` Blue, `⇧` Green, `⌥` Orange, `⌃` Purple, `⎋` Coral/Rose, `␣` Cyan).
+  - [x] Show real-time colored tokenized badge previews in the shortcut rows within the Keybinding Editor instead of a plain text field alone.
+  - [x] Add the modifier legend bar to the Keybinding Editor tab in Settings for consistent quick reference.
 
 
 ---
