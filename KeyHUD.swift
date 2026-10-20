@@ -3175,28 +3175,6 @@ struct KeybindingEditorView: View {
             .padding(.horizontal, 18)
             .padding(.vertical, 7)
             .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
-
-            Divider()
-
-            // Footer
-            HStack {
-                Text("Edits persist to ~/.config/keyhud/custom_shortcuts.json")
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
-
-                Spacer()
-
-                Button("Done") {
-                    if state.isDirty {
-                        state.save()
-                    }
-                    onClose()
-                }
-                .keyboardShortcut(.defaultAction)
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 10)
-            .background(Color(NSColor.windowBackgroundColor))
         }
         .frame(minWidth: 650, minHeight: 480)
         .background(Color(NSColor.windowBackgroundColor))
@@ -3359,20 +3337,29 @@ struct SettingsView: View {
 
             // Footer Actions
             HStack {
-                Button("Reset Defaults") {
-                    settings.widthPercent = 75
-                    settings.heightPercent = 65
-                    settings.triggerType = 0
-                    settings.holdDuration = 0.35
-                    settings.accentTheme = AccentTheme.cyan.rawValue
-                    settings.appearanceMode = ColorSchemeMode.dark.rawValue
-                    settings.isPinned = false
-                    HUDWindowController.shared.applyScreenPercentageFrame()
+                if selectedTab == .shortcuts {
+                    Text("Edits persist to ~/.config/keyhud/custom_shortcuts.json")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                } else {
+                    Button("Reset Defaults") {
+                        settings.widthPercent = 75
+                        settings.heightPercent = 65
+                        settings.triggerType = 0
+                        settings.holdDuration = 0.35
+                        settings.accentTheme = AccentTheme.cyan.rawValue
+                        settings.appearanceMode = ColorSchemeMode.dark.rawValue
+                        settings.isPinned = false
+                        HUDWindowController.shared.applyScreenPercentageFrame()
+                    }
                 }
 
                 Spacer()
 
                 Button("Done") {
+                    if editorState.isDirty {
+                        editorState.save()
+                    }
                     HUDWindowController.shared.applyScreenPercentageFrame()
                     onClose()
                 }
