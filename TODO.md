@@ -25,6 +25,9 @@
   - [x] Reactive real-time theme updating across HUD columns, badges, borders, and settings.
   - [ ] Zebra striping toggle in Settings for easier wide scanning.
 
+- [x] BUGS
+  - [x] When navigating via the arrow keys when you reach a column that has a vertical scroll, scrolling automatically follows active item into view. Horizontal arrow navigation also automatically scrolls across columns.
+
 ---
 
 ## 🎯 Next Features

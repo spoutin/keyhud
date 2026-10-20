@@ -2252,61 +2252,88 @@ struct HUDView: View {
                     }
                     .frame(width: geo.size.width, height: geo.size.height, alignment: .center)
                 } else {
-                    ScrollView(.horizontal, showsIndicators: true) {
-                        HStack(alignment: .top, spacing: 16) {
-                            ForEach(Array(filteredGroups.enumerated()), id: \.element.id) { groupIndex, group in
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text(group.title.uppercased())
-                                        .font(.system(size: 11, weight: .bold))
-                                        .foregroundColor(group.title.contains("Favorites") ? Color.yellow : accent)
-                                        .padding(.bottom, 2)
+                    ScrollViewReader { horizProxy in
+                        ScrollView(.horizontal, showsIndicators: true) {
+                            HStack(alignment: .top, spacing: 16) {
+                                ForEach(Array(filteredGroups.enumerated()), id: \.element.id) { groupIndex, group in
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Text(group.title.uppercased())
+                                            .font(.system(size: 11, weight: .bold))
+                                            .foregroundColor(group.title.contains("Favorites") ? Color.yellow : accent)
+                                            .padding(.bottom, 2)
 
-                                    ScrollView(.vertical, showsIndicators: true) {
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            ForEach(Array(group.items.enumerated()), id: \.element.id) { itemIndex, item in
-                                                let isSelected = (currentGroupIndex == groupIndex && currentItemIndex == itemIndex)
-                                                let isHovered = (searchState.hoveredItemId == item.id)
-                                                let isBookmarked = favorites.isBookmarked(scopeKey: currentScopeStorageKey, title: item.title)
+                                        ScrollViewReader { vertProxy in
+                                            ScrollView(.vertical, showsIndicators: true) {
+                                                VStack(alignment: .leading, spacing: 4) {
+                                                    ForEach(Array(group.items.enumerated()), id: \.element.id) { itemIndex, item in
+                                                        let isSelected = (currentGroupIndex == groupIndex && currentItemIndex == itemIndex)
+                                                        let isHovered = (searchState.hoveredItemId == item.id)
+                                                        let isBookmarked = favorites.isBookmarked(scopeKey: currentScopeStorageKey, title: item.title)
 
-                                                ShortcutRow(
-                                                    item: item,
-                                                    isSelected: isSelected,
-                                                    isHovered: isHovered,
-                                                    isBookmarked: isBookmarked,
-                                                    accentColor: accent,
-                                                    onSelect: {
-                                                        searchState.selectedGroupIndex = groupIndex
-                                                        searchState.selectedItemIndex = itemIndex
-                                                        if let customTarget = currentTargetForExecution {
-                                                            ActionExecutor.shared.execute(item: item, targetApp: customTarget)
-                                                        } else {
-                                                            onExecute(item)
-                                                        }
-                                                    },
-                                                    onToggleBookmark: {
-                                                        favorites.toggleBookmark(scopeKey: currentScopeStorageKey, title: item.title)
-                                                        HUDWindowController.shared.applyScreenPercentageFrame(groups: currentScopeGroups)
-                                                    },
-                                                    onHover: { hovering in
-                                                        searchState.hoveredItemId = hovering ? item.id : nil
+                                                        ShortcutRow(
+                                                            item: item,
+                                                            isSelected: isSelected,
+                                                            isHovered: isHovered,
+                                                            isBookmarked: isBookmarked,
+                                                            accentColor: accent,
+                                                            onSelect: {
+                                                                searchState.selectedGroupIndex = groupIndex
+                                                                searchState.selectedItemIndex = itemIndex
+                                                                if let customTarget = currentTargetForExecution {
+                                                                    ActionExecutor.shared.execute(item: item, targetApp: customTarget)
+                                                                } else {
+                                                                    onExecute(item)
+                                                                }
+                                                            },
+                                                            onToggleBookmark: {
+                                                                favorites.toggleBookmark(scopeKey: currentScopeStorageKey, title: item.title)
+                                                                HUDWindowController.shared.applyScreenPercentageFrame(groups: currentScopeGroups)
+                                                            },
+                                                            onHover: { hovering in
+                                                                searchState.hoveredItemId = hovering ? item.id : nil
+                                                            }
+                                                        )
+                                                        .id(item.id)
                                                     }
-                                                )
+                                                }
+                                                .padding(.trailing, 4)
+                                            }
+                                            .frame(maxHeight: .infinity)
+                                            .onChange(of: searchState.selectedItemIndex) {
+                                                if currentGroupIndex == groupIndex && currentItemIndex < group.items.count {
+                                                    withAnimation(.easeInOut(duration: 0.12)) {
+                                                        vertProxy.scrollTo(group.items[currentItemIndex].id, anchor: nil)
+                                                    }
+                                                }
+                                            }
+                                            .onChange(of: searchState.selectedGroupIndex) {
+                                                if currentGroupIndex == groupIndex && currentItemIndex < group.items.count {
+                                                    withAnimation(.easeInOut(duration: 0.12)) {
+                                                        vertProxy.scrollTo(group.items[currentItemIndex].id, anchor: nil)
+                                                    }
+                                                }
                                             }
                                         }
-                                        .padding(.trailing, 4)
                                     }
+                                    .frame(width: 260)
                                     .frame(maxHeight: .infinity)
+                                    .padding(12)
+                                    .background(Color.black.opacity(0.4))
+                                    .cornerRadius(10)
+                                    .id(group.id)
                                 }
-                                .frame(width: 260)
-                                .frame(maxHeight: .infinity)
-                                .padding(12)
-                                .background(Color.black.opacity(0.4))
-                                .cornerRadius(10)
+                            }
+                        }
+                        .padding(18)
+                        .frame(minHeight: geo.size.height)
+                        .onChange(of: searchState.selectedGroupIndex) {
+                            if currentGroupIndex < filteredGroups.count {
+                                withAnimation(.easeInOut(duration: 0.15)) {
+                                    horizProxy.scrollTo(filteredGroups[currentGroupIndex].id, anchor: nil)
+                                }
                             }
                         }
                     }
-                    .padding(18)
-                    .frame(minHeight: geo.size.height)
                 }
             }
 
