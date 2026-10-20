@@ -913,6 +913,21 @@ class EditorState: ObservableObject {
         return appDict.keys.sorted()
     }
 
+    func currentGroups() -> [ShortcutGroup] {
+        guard let appDict = config[selectedBundleID] else { return [] }
+        var result: [ShortcutGroup] = []
+        for cat in appDict.keys.sorted() {
+            let list = appDict[cat] ?? []
+            let items = list.map { dict in
+                ShortcutItem(title: dict["title"] ?? "", keys: dict["keys"] ?? "")
+            }
+            if !items.isEmpty {
+                result.append(ShortcutGroup(title: cat, items: items))
+            }
+        }
+        return result
+    }
+
     func shortcuts(for category: String) -> [[String: String]] {
         return config[selectedBundleID]?[category] ?? []
     }
@@ -1166,6 +1181,29 @@ class RunningAppsTracker: ObservableObject {
                 self.runningApps = apps
             }
         }
+    }
+}
+
+// MARK: - Block Menu Item
+
+class BlockMenuItem: NSMenuItem {
+    private var handler: () -> Void
+
+    init(title: String, iconName: String? = nil, handler: @escaping () -> Void) {
+        self.handler = handler
+        super.init(title: title, action: #selector(didSelect), keyEquivalent: "")
+        self.target = self
+        if let icon = iconName {
+            self.image = NSImage(systemSymbolName: icon, accessibilityDescription: nil)
+        }
+    }
+
+    required init(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    @objc private func didSelect() {
+        handler()
     }
 }
 
@@ -2194,32 +2232,23 @@ struct HUDView: View {
                 .buttonStyle(PlainButtonStyle())
                 .help(settings.isPinned ? "Unpin HUD (currently stays open while running shortcuts)" : "Pin HUD (keep cheatsheet open while running shortcuts)")
 
-                // Export to Markdown Menu
-                Menu {
-                    Button(action: {
+                // Export to Markdown Button
+                Button(action: {
+                    let menu = NSMenu(title: "Export")
+                    menu.addItem(BlockMenuItem(title: "Copy Markdown to Clipboard", iconName: "doc.on.clipboard") {
                         MarkdownExporter.copyToClipboard(appName: appName, groups: currentScopeGroups)
-                    }) {
-                        HStack {
-                            Image(systemName: "doc.on.clipboard")
-                            Text("Copy Markdown to Clipboard")
-                        }
-                    }
-
-                    Button(action: {
+                    })
+                    menu.addItem(BlockMenuItem(title: "Save to Documents (KeyHUD)", iconName: "folder") {
                         _ = MarkdownExporter.saveToFile(appName: appName, groups: currentScopeGroups)
-                    }) {
-                        HStack {
-                            Image(systemName: "folder")
-                            Text("Save to Documents (KeyHUD)")
-                        }
-                    }
-                } label: {
+                    })
+                    menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+                }) {
                     Image(systemName: "square.and.arrow.up")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundColor(.gray)
                         .padding(4)
                 }
-                .menuStyle(BorderlessButtonMenuStyle())
+                .buttonStyle(PlainButtonStyle())
                 .help("Export \(appName) cheatsheet to Markdown...")
 
                 // Edit Shortcuts Button
@@ -2776,6 +2805,25 @@ struct KeybindingEditorView: View {
                 .cornerRadius(6)
 
                 // Actions
+                Button(action: {
+                    let groups = state.currentGroups()
+                    let appTitle = state.displayName(for: state.selectedBundleID)
+                    let menu = NSMenu(title: "Export")
+                    menu.addItem(BlockMenuItem(title: "Copy Markdown to Clipboard", iconName: "doc.on.clipboard") {
+                        MarkdownExporter.copyToClipboard(appName: appTitle, groups: groups)
+                    })
+                    menu.addItem(BlockMenuItem(title: "Save to Documents (KeyHUD)", iconName: "folder") {
+                        _ = MarkdownExporter.saveToFile(appName: appTitle, groups: groups)
+                    })
+                    menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "square.and.arrow.up")
+                        Text("Export...")
+                    }
+                }
+                .help("Export currently configured shortcuts to Markdown")
+
                 Button("Revert") {
                     state.revert()
                 }
@@ -3728,6 +3776,24 @@ struct SettingsView: View {
 
                 Button("Auto-Detect Configs") {
                     AppDelegate.shared?.autoDetectAction()
+                }
+
+                Button(action: {
+                    let groups = editorState.currentGroups()
+                    let appTitle = editorState.displayName(for: editorState.selectedBundleID)
+                    let menu = NSMenu(title: "Export")
+                    menu.addItem(BlockMenuItem(title: "Copy Markdown to Clipboard", iconName: "doc.on.clipboard") {
+                        MarkdownExporter.copyToClipboard(appName: appTitle, groups: groups)
+                    })
+                    menu.addItem(BlockMenuItem(title: "Save to Documents (KeyHUD)", iconName: "folder") {
+                        _ = MarkdownExporter.saveToFile(appName: appTitle, groups: groups)
+                    })
+                    menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "square.and.arrow.up")
+                        Text("Export Markdown...")
+                    }
                 }
 
                 Spacer()
