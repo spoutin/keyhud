@@ -1974,7 +1974,7 @@ struct ShortcutRow: View {
                             .frame(width: 14, height: 14)
                     }
                     .buttonStyle(PlainButtonStyle())
-                    .help(isBookmarked ? "Remove from Favorites" : "Add to Favorites")
+                    .help(isBookmarked ? "Favorite: Click to remove from pinned ⭐ Favorites column" : "Favorite: Click to pin to ⭐ Favorites column")
 
                     Text(item.title)
                         .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
@@ -2574,6 +2574,7 @@ struct HUDView: View {
                         )
                     }
                     .menuStyle(BorderlessButtonMenuStyle())
+                    .help("Application & Scope Menu: Switch between active app, terminal tools, global tools (AeroSpace, macOS), or running apps")
                 }
                 .menuStyle(BorderlessButtonMenuStyle())
 
@@ -2611,7 +2612,7 @@ struct HUDView: View {
                         .cornerRadius(5)
                     }
                     .menuStyle(BorderlessButtonMenuStyle())
-                    .help("Search Scope: \(searchState.activeSearchScope.rawValue)")
+                    .help("Search Scope: \(searchState.activeSearchScope.rawValue) — Filter search between Current View, Sub-tools, or Global")
 
                     SearchBarView(
                         text: $searchState.query,
@@ -2630,6 +2631,7 @@ struct HUDView: View {
                                 .foregroundColor(.gray)
                         }
                         .buttonStyle(PlainButtonStyle())
+                        .help("Clear search filter (Esc)")
                     }
                 }
                 .padding(.horizontal, 8)
@@ -2649,7 +2651,7 @@ struct HUDView: View {
                         .padding(4)
                 }
                 .buttonStyle(PlainButtonStyle())
-                .help(searchState.showHiddenItems ? "Hide known shortcuts (currently showing all)" : "Reveal hidden/known shortcuts for this app")
+                .help(searchState.showHiddenItems ? "Hide Known Shortcuts: Click to hide common/known shortcuts" : "Reveal Hidden Shortcuts: Click to show all hidden shortcuts for this app")
 
                 // Command Palette Toggle Button
                 Button(action: {
@@ -2662,7 +2664,7 @@ struct HUDView: View {
                         .padding(4)
                 }
                 .buttonStyle(PlainButtonStyle())
-                .help(searchState.isCommandPaletteActive ? "Command Palette Active (showing all menu actions)" : "Toggle Command Palette mode (show all menu actions)")
+                .help(searchState.isCommandPaletteActive ? "Command Palette Active: Click to return to shortcuts only" : "Command Palette Mode: Click to index and show all application menu actions (Paletro-style)")
 
                 // Pin Button
                 Button(action: {
@@ -2674,7 +2676,7 @@ struct HUDView: View {
                         .padding(4)
                 }
                 .buttonStyle(PlainButtonStyle())
-                .help(settings.isPinned ? "Unpin HUD (currently stays open while running shortcuts)" : "Pin HUD (keep cheatsheet open while running shortcuts)")
+                .help(settings.isPinned ? "Unpin HUD: Click to auto-close HUD when clicking shortcuts" : "Pin HUD: Click to keep HUD floating on screen while running shortcuts")
 
                 // Export to Markdown Button
                 Button(action: {
@@ -2693,7 +2695,7 @@ struct HUDView: View {
                         .padding(4)
                 }
                 .buttonStyle(PlainButtonStyle())
-                .help("Export \(appName) cheatsheet to Markdown...")
+                .help("Export Cheatsheet: Copy formatted Markdown to clipboard or save to Documents folder")
 
                 // Edit Shortcuts Button
                 Button(action: {
@@ -2706,16 +2708,17 @@ struct HUDView: View {
                         .padding(4)
                 }
                 .buttonStyle(PlainButtonStyle())
-                .help("Edit shortcuts for \(appName)...")
+                .help("Keybinding Editor: Customize, record, or add shortcuts and categories for \(appName)")
 
-                    // Close Button
-                    Button(action: onDismiss) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 18))
-                            .foregroundColor(.gray)
-                    }
-                    .buttonStyle(PlainButtonStyle())
+                // Close Button
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 18))
+                        .foregroundColor(.gray)
                 }
+                .buttonStyle(PlainButtonStyle())
+                .help("Close KeyHUD (Esc)")
+            }
                 .padding(.horizontal, 20)
                 .padding(.top, 14)
                 .padding(.bottom, 12)
@@ -2762,6 +2765,7 @@ struct HUDView: View {
                                         .cornerRadius(6)
                                     }
                                     .buttonStyle(PlainButtonStyle())
+                                    .help("Relaunch KeyHUD to re-check Accessibility permissions")
 
                                     Button(action: {
                                         HUDWindowController.shared.hide()
@@ -2781,6 +2785,7 @@ struct HUDView: View {
                                         .cornerRadius(6)
                                     }
                                     .buttonStyle(PlainButtonStyle())
+                                    .help("Open macOS Privacy & Security Settings to grant Accessibility access")
                                 }
                                 .padding(.top, 4)
                             }
