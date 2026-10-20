@@ -963,6 +963,12 @@ class EditorState: ObservableObject {
 // MARK: - Accessibility Menu Scanner
 
 class MenuScanner {
+    private static var menuCache: [String: [ShortcutGroup]] = [:]
+
+    static func invalidate(bundleID: String) {
+        menuCache.removeValue(forKey: bundleID)
+    }
+
     static func decodeModifiers(_ mod: Int) -> String {
         var str = ""
         if (mod & 4) != 0 { str += "⌃" }
@@ -1010,6 +1016,11 @@ class MenuScanner {
     }
 
     static func scan(app: NSRunningApplication) -> [ShortcutGroup] {
+        let bID = app.bundleIdentifier ?? "\(app.processIdentifier)"
+        if let cached = menuCache[bID], !cached.isEmpty {
+            return cached
+        }
+
         let axApp = AXUIElementCreateApplication(app.processIdentifier)
         var menuBarVal: AnyObject?
         guard AXUIElementCopyAttributeValue(axApp, kAXMenuBarAttribute as CFString, &menuBarVal) == .success,
@@ -1037,7 +1048,73 @@ class MenuScanner {
                 groups.append(ShortcutGroup(title: title, items: items))
             }
         }
+        menuCache[bID] = groups
         return groups
+    }
+}
+
+// MARK: - Pre-Cached Running Apps Tracker
+
+struct RunningAppItem: Identifiable, Equatable {
+    let id: pid_t
+    let bundleIdentifier: String
+    let localizedName: String
+    let icon: NSImage
+
+    static func == (lhs: RunningAppItem, rhs: RunningAppItem) -> Bool {
+        lhs.id == rhs.id
+    }
+}
+
+class RunningAppsTracker: ObservableObject {
+    static let shared = RunningAppsTracker()
+
+    @Published var runningApps: [RunningAppItem] = []
+
+    init() {
+        refresh()
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didLaunchApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.refresh()
+        }
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didTerminateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notif in
+            if let app = notif.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+               let bID = app.bundleIdentifier {
+                MenuScanner.invalidate(bundleID: bID)
+            }
+            self?.refresh()
+        }
+    }
+
+    func refresh() {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let myBID = Bundle.main.bundleIdentifier
+            let apps = NSWorkspace.shared.runningApplications
+                .filter {
+                    $0.activationPolicy == .regular &&
+                    $0.bundleIdentifier != myBID &&
+                    $0.bundleIdentifier != "com.apple.loginwindow"
+                }
+                .sorted { ($0.localizedName ?? "") < ($1.localizedName ?? "") }
+                .map { app in
+                    RunningAppItem(
+                        id: app.processIdentifier,
+                        bundleIdentifier: app.bundleIdentifier ?? "",
+                        localizedName: app.localizedName ?? "App",
+                        icon: app.icon ?? NSImage()
+                    )
+                }
+            DispatchQueue.main.async {
+                self.runningApps = apps
+            }
+        }
     }
 }
 
@@ -1775,26 +1852,17 @@ struct HUDView: View {
                         }
 
                         // SECTION 3: Other Running Applications
-                        let otherApps = NSWorkspace.shared.runningApplications.filter {
-                            $0.activationPolicy == .regular &&
-                            $0.bundleIdentifier != Bundle.main.bundleIdentifier &&
-                            $0.bundleIdentifier != bundleID &&
-                            $0.bundleIdentifier != "com.apple.loginwindow"
-                        }.sorted { ($0.localizedName ?? "") < ($1.localizedName ?? "") }
+                        let otherApps = RunningAppsTracker.shared.runningApps.filter { $0.bundleIdentifier != bundleID }
 
                         if !otherApps.isEmpty {
                             Section("OTHER RUNNING APPS") {
-                                ForEach(otherApps, id: \.processIdentifier) { app in
-                                    let otherName = app.localizedName ?? "App"
-                                    let otherBID = app.bundleIdentifier ?? ""
-                                    let otherIcon = app.icon ?? NSImage()
-
+                                ForEach(otherApps) { app in
                                     Button(action: {
-                                        searchState.navigateToScope(.runningApp(bundleID: otherBID, name: otherName, icon: otherIcon))
+                                        searchState.navigateToScope(.runningApp(bundleID: app.bundleIdentifier, name: app.localizedName, icon: app.icon))
                                     }) {
                                         HStack {
-                                            Image(nsImage: otherIcon)
-                                            Text(otherName)
+                                            Image(nsImage: app.icon)
+                                            Text(app.localizedName)
                                         }
                                     }
                                 }
