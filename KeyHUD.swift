@@ -168,11 +168,13 @@ class AppSettings: ObservableObject {
     @Published var widthPercent: Double {
         didSet {
             UserDefaults.standard.set(widthPercent, forKey: "widthPercent")
+            HUDWindowController.shared.applyScreenPercentageFrame()
         }
     }
     @Published var heightPercent: Double {
         didSet {
             UserDefaults.standard.set(heightPercent, forKey: "heightPercent")
+            HUDWindowController.shared.applyScreenPercentageFrame()
         }
     }
     @Published var triggerType: Int {
@@ -2638,7 +2640,7 @@ struct HUDView: View {
                 .padding(.vertical, 5)
                 .background(Color.white.opacity(0.12))
                 .cornerRadius(8)
-                .frame(width: 440)
+                .frame(minWidth: 200, idealWidth: 320, maxWidth: 420)
 
                 // Show / Hide Known Shortcuts Button
                 Button(action: {
@@ -2945,7 +2947,7 @@ struct HUDView: View {
             .padding(.vertical, 8)
             .background(Color.black.opacity(0.35))
         }
-        .frame(minWidth: 520, minHeight: 360)
+        .frame(minWidth: 860, minHeight: 520)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onChange(of: searchState.selectedScope) {
             HUDWindowController.shared.applyScreenPercentageFrame(groups: currentScopeGroups)
@@ -3018,7 +3020,7 @@ class HUDWindowController: NSWindowController {
         panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
         panel.standardWindowButton(.zoomButton)?.isHidden = true
         panel.animationBehavior = .utilityWindow
-        panel.minSize = NSSize(width: 520, height: 360)
+        panel.minSize = NSSize(width: 860, height: 520)
 
         super.init(window: panel)
 
@@ -3053,11 +3055,13 @@ class HUDWindowController: NSWindowController {
         let visible = screen.visibleFrame
         let settings = AppSettings.shared
 
-        let minW: CGFloat = 520.0
-        let minH: CGFloat = 360.0
+        // Header requires ~840-860pt to comfortably display app dropdown, search bar, and 6 action buttons without clipping
+        let minW: CGFloat = min(visible.width * 0.95, 860.0)
+        // Minimum height of 520pt ensures at least 9-10 rows are visible without aggressive scrolling
+        let minH: CGFloat = min(visible.height * 0.90, 520.0)
 
-        let maxWPercent = max(25.0, min(100.0, settings.widthPercent))
-        let maxHPercent = max(25.0, min(100.0, settings.heightPercent))
+        let maxWPercent = max(35.0, min(100.0, settings.widthPercent))
+        let maxHPercent = max(35.0, min(100.0, settings.heightPercent))
 
         let maxAllowedWidth = max(minW, visible.width * (maxWPercent / 100.0))
         let maxAllowedHeight = max(minH, visible.height * (maxHPercent / 100.0))
@@ -3068,17 +3072,17 @@ class HUDWindowController: NSWindowController {
 
         if activeGroups.isEmpty {
             fittedWidth = minW
-            fittedHeight = minH
+            fittedHeight = max(minH, maxAllowedHeight * 0.75)
         } else {
             let colCount = CGFloat(max(1, min(activeGroups.count, 6)))
-            let colWidth: CGFloat = 260.0
-            let hPadding: CGFloat = 60.0
+            let colWidth: CGFloat = 265.0
+            let hPadding: CGFloat = 80.0
             let contentWidth = colCount * colWidth + hPadding
 
             let maxItems = activeGroups.map { $0.items.count }.max() ?? 0
             let rowH: CGFloat = 34.0
-            let headerH: CGFloat = 30.0
-            let chromeH: CGFloat = 120.0 // Header + bottom legend bar + padding
+            let headerH: CGFloat = 40.0
+            let chromeH: CGFloat = 180.0 // Header toolbar (56) + bottom legend bar (38) + GeometryReader margins (36) + card padding/header (50)
             let contentHeight = headerH + (CGFloat(maxItems) * rowH) + chromeH
 
             fittedWidth = max(minW, min(maxAllowedWidth, contentWidth))
