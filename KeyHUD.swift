@@ -422,11 +422,6 @@ struct KeyComboDecoder {
         if cleanFlags.contains(.shift) { combo += "⇧" }
         if cleanFlags.contains(.command) { combo += "⌘" }
 
-        let isSpecial = Int(keyCode) >= kVK_F1 && Int(keyCode) <= kVK_F12 || Int(keyCode) == kVK_Space || Int(keyCode) == kVK_Tab || Int(keyCode) == kVK_Return
-        if combo.isEmpty && !isSpecial {
-            combo += "⌘"
-        }
-
         combo += keyStr
         return (combo, false, false)
     }
@@ -925,6 +920,7 @@ class EditorState: ObservableObject {
     }
 
     func startRecording(category: String, index: Int, variantIndex: Int? = nil) {
+        NSApp.keyWindow?.makeFirstResponder(nil)
         recordingCategory = category
         recordingIndex = index
         recordingVariantIndex = variantIndex
@@ -4088,9 +4084,8 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
             // If editor is currently recording a shortcut, intercept and decode keystroke!
             if EditorState.shared.isRecording {
-                if EditorState.shared.handleRecordedKey(flags: event.modifierFlags, keyCode: event.keyCode) {
-                    return nil
-                }
+                _ = EditorState.shared.handleRecordedKey(flags: event.modifierFlags, keyCode: event.keyCode)
+                return nil // Always swallow keystrokes completely during recording!
             }
 
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
@@ -4213,6 +4208,7 @@ class HotKeyManager {
         }
 
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if EditorState.shared.isRecording { return event }
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             if event.keyCode == 44 && flags.contains(.command) && flags.contains(.shift) {
                 DispatchQueue.main.async {
@@ -4234,6 +4230,7 @@ class HotKeyManager {
         eventType.eventKind = OSType(kEventHotKeyPressed)
 
         InstallEventHandler(GetApplicationEventTarget(), { (_, theEvent, _) -> OSStatus in
+            if EditorState.shared.isRecording { return noErr }
             DispatchQueue.main.async {
                 HUDWindowController.shared.toggle()
             }
@@ -4251,6 +4248,7 @@ class HotKeyManager {
     }
 
     private func handleFlagsChanged(_ event: NSEvent) {
+        if EditorState.shared.isRecording { return }
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let isOnlyCmd = flags == .command
 
