@@ -2756,19 +2756,9 @@ struct KeybindingEditorView: View {
         VStack(spacing: 0) {
             // Header Bar
             HStack(spacing: 12) {
-                Image(systemName: "keyboard.fill")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(accent)
-
-                Text("Keybinding Editor")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(.primary)
-
-                Spacer()
-
-                // App Dropdown
-                HStack(spacing: 6) {
-                    Text("App:")
+                // App Selector Pill
+                HStack(spacing: 8) {
+                    Text("Target App:")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(.secondary)
 
@@ -2778,7 +2768,7 @@ struct KeybindingEditorView: View {
                         }
                     }
                     .pickerStyle(MenuPickerStyle())
-                    .frame(minWidth: 240)
+                    .frame(minWidth: 200)
 
                     Button(action: {
                         state.autoDetectFromRunningApp(bundleID: state.selectedBundleID)
@@ -2799,44 +2789,48 @@ struct KeybindingEditorView: View {
                     .buttonStyle(PlainButtonStyle())
                     .help("Add new application by bundle identifier")
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
                 .background(Color(NSColor.controlBackgroundColor))
                 .cornerRadius(6)
 
+                Spacer()
+
                 // Actions
-                Button(action: {
-                    let groups = state.currentGroups()
-                    let appTitle = state.displayName(for: state.selectedBundleID)
-                    let menu = NSMenu(title: "Export")
-                    menu.addItem(BlockMenuItem(title: "Copy Markdown to Clipboard", iconName: "doc.on.clipboard") {
-                        MarkdownExporter.copyToClipboard(appName: appTitle, groups: groups)
-                    })
-                    menu.addItem(BlockMenuItem(title: "Save to Documents (KeyHUD)", iconName: "folder") {
-                        _ = MarkdownExporter.saveToFile(appName: appTitle, groups: groups)
-                    })
-                    menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
-                }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "square.and.arrow.up")
-                        Text("Export...")
+                HStack(spacing: 8) {
+                    Button(action: {
+                        let groups = state.currentGroups()
+                        let appTitle = state.displayName(for: state.selectedBundleID)
+                        let menu = NSMenu(title: "Export")
+                        menu.addItem(BlockMenuItem(title: "Copy Markdown to Clipboard", iconName: "doc.on.clipboard") {
+                            MarkdownExporter.copyToClipboard(appName: appTitle, groups: groups)
+                        })
+                        menu.addItem(BlockMenuItem(title: "Save to Documents (KeyHUD)", iconName: "folder") {
+                            _ = MarkdownExporter.saveToFile(appName: appTitle, groups: groups)
+                        })
+                        menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "square.and.arrow.up")
+                            Text("Export...")
+                        }
                     }
-                }
-                .help("Export currently configured shortcuts to Markdown")
+                    .help("Export currently configured shortcuts to Markdown")
 
-                Button("Revert") {
-                    state.revert()
-                }
-                .disabled(!state.isDirty)
+                    Button("Revert") {
+                        state.revert()
+                    }
+                    .disabled(!state.isDirty)
 
-                Button("Save Changes") {
-                    state.save()
+                    Button("Save Changes") {
+                        state.save()
+                    }
+                    .disabled(!state.isDirty)
+                    .keyboardShortcut("s", modifiers: .command)
                 }
-                .disabled(!state.isDirty)
-                .keyboardShortcut("s", modifiers: .command)
             }
             .padding(.horizontal, 20)
-            .padding(.vertical, 14)
+            .padding(.vertical, 12)
             .background(Color(NSColor.windowBackgroundColor))
 
             Divider()
@@ -3321,6 +3315,7 @@ struct SettingsView: View {
                 ForEach(SettingsTab.allCases) { tab in
                     Button(action: {
                         settings.selectedSettingsTab = tab.rawValue
+                        SettingsWindowController.shared.updateSizeForTab(tab)
                     }) {
                         HStack(spacing: 6) {
                             Image(systemName: tab.icon)
@@ -3778,27 +3773,9 @@ struct SettingsView: View {
                     AppDelegate.shared?.autoDetectAction()
                 }
 
-                Button(action: {
-                    let groups = editorState.currentGroups()
-                    let appTitle = editorState.displayName(for: editorState.selectedBundleID)
-                    let menu = NSMenu(title: "Export")
-                    menu.addItem(BlockMenuItem(title: "Copy Markdown to Clipboard", iconName: "doc.on.clipboard") {
-                        MarkdownExporter.copyToClipboard(appName: appTitle, groups: groups)
-                    })
-                    menu.addItem(BlockMenuItem(title: "Save to Documents (KeyHUD)", iconName: "folder") {
-                        _ = MarkdownExporter.saveToFile(appName: appTitle, groups: groups)
-                    })
-                    menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
-                }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "square.and.arrow.up")
-                        Text("Export Markdown...")
-                    }
-                }
-
                 Spacer()
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 20)
             .padding(.vertical, 8)
             .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
 
@@ -3816,15 +3793,23 @@ class SettingsWindowController: NSWindowController {
     static let shared = SettingsWindowController()
 
     init() {
+        let initialTab = SettingsTab(rawValue: AppSettings.shared.selectedSettingsTab) ?? .general
+        let initialSize: NSSize
+        switch initialTab {
+        case .general: initialSize = NSSize(width: 640, height: 560)
+        case .appearance: initialSize = NSSize(width: 640, height: 580)
+        case .shortcuts: initialSize = NSSize(width: 880, height: 680)
+        }
+
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 780, height: 640),
+            contentRect: NSRect(x: 0, y: 0, width: initialSize.width, height: initialSize.height),
             styleMask: [.titled, .closable, .resizable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
         window.title = "KeyHUD Settings & Keybinding Editor"
         window.collectionBehavior = [.moveToActiveSpace]
-        window.minSize = NSSize(width: 680, height: 520)
+        window.minSize = NSSize(width: 640, height: 500)
         window.center()
         window.isReleasedWhenClosed = false
         super.init(window: window)
@@ -3839,12 +3824,32 @@ class SettingsWindowController: NSWindowController {
         fatalError("init(coder:) has not been implemented")
     }
 
+    func updateSizeForTab(_ tab: SettingsTab) {
+        guard let window = window else { return }
+        let targetSize: NSSize
+        switch tab {
+        case .general:
+            targetSize = NSSize(width: 640, height: 560)
+        case .appearance:
+            targetSize = NSSize(width: 640, height: 580)
+        case .shortcuts:
+            targetSize = NSSize(width: 880, height: 680)
+        }
+
+        var frame = window.frame
+        let oldHeight = frame.size.height
+        frame.origin.y += (oldHeight - targetSize.height)
+        frame.size = targetSize
+        window.setFrame(frame, display: true, animate: window.isVisible)
+    }
+
     func openSettings(selectingTab: SettingsTab = .general, bundleID: String? = nil) {
         AppSettings.shared.selectedSettingsTab = selectingTab.rawValue
         if let bid = bundleID {
             EditorState.shared.reload(selecting: bid)
         }
         AppSettings.shared.updateWindowsAppearance()
+        updateSizeForTab(selectingTab)
         window?.center()
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
