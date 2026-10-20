@@ -917,19 +917,22 @@ class EditorState: ObservableObject {
     @Published var newAppBundleID: String = ""
     @Published var recordingCategory: String? = nil
     @Published var recordingIndex: Int? = nil
+    @Published var recordingVariantIndex: Int? = nil
 
     var isRecording: Bool {
         recordingCategory != nil && recordingIndex != nil
     }
 
-    func startRecording(category: String, index: Int) {
+    func startRecording(category: String, index: Int, variantIndex: Int? = nil) {
         recordingCategory = category
         recordingIndex = index
+        recordingVariantIndex = variantIndex
     }
 
     func stopRecording() {
         recordingCategory = nil
         recordingIndex = nil
+        recordingVariantIndex = nil
     }
 
     func handleRecordedKey(flags: NSEvent.ModifierFlags, keyCode: UInt16) -> Bool {
@@ -941,21 +944,43 @@ class EditorState: ObservableObject {
             return true
         }
 
+        let currentTitle = config[selectedBundleID]?[cat]?[idx]["title"] ?? ""
+        let currentRawKeys = config[selectedBundleID]?[cat]?[idx]["keys"] ?? ""
+        var variants = currentRawKeys.split(separator: "/").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+
         if isClear {
-            let currentTitle = config[selectedBundleID]?[cat]?[idx]["title"] ?? ""
-            updateShortcut(category: cat, index: idx, title: currentTitle, keys: "")
+            if let vIdx = recordingVariantIndex, vIdx < variants.count {
+                variants.remove(at: vIdx)
+            } else {
+                variants.removeAll()
+            }
+            updateShortcut(category: cat, index: idx, title: currentTitle, keys: variants.joined(separator: " / "))
             stopRecording()
             return true
         }
 
         if let combo = result {
-            let currentTitle = config[selectedBundleID]?[cat]?[idx]["title"] ?? ""
-            updateShortcut(category: cat, index: idx, title: currentTitle, keys: combo)
+            if let vIdx = recordingVariantIndex, vIdx < variants.count {
+                variants[vIdx] = combo
+            } else {
+                variants.append(combo)
+            }
+            updateShortcut(category: cat, index: idx, title: currentTitle, keys: variants.joined(separator: " / "))
             stopRecording()
             return true
         }
 
         return false
+    }
+
+    func deleteVariant(category: String, index: Int, variantIndex: Int) {
+        guard let list = config[selectedBundleID]?[category], index < list.count else { return }
+        let currentTitle = list[index]["title"] ?? ""
+        let currentRawKeys = list[index]["keys"] ?? ""
+        var variants = currentRawKeys.split(separator: "/").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        guard variantIndex < variants.count else { return }
+        variants.remove(at: variantIndex)
+        updateShortcut(category: category, index: index, title: currentTitle, keys: variants.joined(separator: " / "))
     }
 
     var isDirty: Bool {
@@ -3139,8 +3164,6 @@ struct KeybindingEditorView: View {
                                     let currentTitle = item["title"] ?? ""
                                     let currentKeys = item["keys"] ?? ""
 
-                                    let isThisRowRecording = (state.recordingCategory == category && state.recordingIndex == index)
-
                                     HStack(spacing: 10) {
                                         TextField("Title", text: Binding(
                                             get: { currentTitle },
@@ -3149,107 +3172,151 @@ struct KeybindingEditorView: View {
                                         .textFieldStyle(RoundedBorderTextFieldStyle())
                                         .frame(minWidth: 200, maxWidth: .infinity, alignment: .leading)
 
-                                        if isThisRowRecording {
-                                            // Active Recording Indicator Pill
-                                            HStack(spacing: 6) {
-                                                Circle()
-                                                    .fill(Color.red)
-                                                    .frame(width: 8, height: 8)
-                                                Text("Type shortcut...")
-                                                    .font(.system(size: 11, weight: .bold))
-                                                    .foregroundColor(.white)
+                                        let variants = currentKeys.split(separator: "/").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
 
-                                                Button(action: { state.stopRecording() }) {
-                                                    Image(systemName: "xmark.circle.fill")
-                                                        .foregroundColor(.white.opacity(0.7))
-                                                        .font(.system(size: 11))
-                                                }
-                                                .buttonStyle(PlainButtonStyle())
-                                                .help("Cancel recording (Esc)")
-                                            }
-                                            .padding(.horizontal, 10)
-                                            .padding(.vertical, 5)
-                                            .background(
-                                                RoundedRectangle(cornerRadius: 6)
-                                                    .fill(Color.red.opacity(0.18))
-                                            )
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 6)
-                                                    .stroke(Color.red.opacity(0.6), lineWidth: 1.2)
-                                            )
-                                        } else {
-                                            // Live Colored Tokenized Badge Preview
-                                            HStack(spacing: 3) {
-                                                let tokens = KeyTokenParser.parse(currentKeys)
-                                                if tokens.isEmpty {
-                                                    Text("None")
-                                                        .font(.system(size: 11, weight: .medium))
-                                                        .foregroundColor(.secondary)
-                                                        .padding(.horizontal, 8)
-                                                        .padding(.vertical, 3)
+                                        HStack(spacing: 6) {
+                                            if variants.isEmpty {
+                                                let isRecordingThisEmpty = (state.recordingCategory == category && state.recordingIndex == index)
+                                                if isRecordingThisEmpty {
+                                                    // Active Recording Indicator Pill
+                                                    HStack(spacing: 6) {
+                                                        Circle().fill(Color.red).frame(width: 8, height: 8)
+                                                        Text("Type shortcut...").font(.system(size: 11, weight: .bold)).foregroundColor(.white)
+                                                        Button(action: { state.stopRecording() }) {
+                                                            Image(systemName: "xmark.circle.fill").foregroundColor(.white.opacity(0.7)).font(.system(size: 11))
+                                                        }
+                                                        .buttonStyle(PlainButtonStyle())
+                                                    }
+                                                    .padding(.horizontal, 10).padding(.vertical, 5)
+                                                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.red.opacity(0.18)))
+                                                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.red.opacity(0.6), lineWidth: 1.2))
                                                 } else {
-                                                    ForEach(Array(tokens.enumerated()), id: \.offset) { _, token in
-                                                        Text(token.text)
-                                                            .font(.system(size: token.isSpecial ? 11 : 10, weight: .bold, design: .monospaced))
-                                                            .padding(.horizontal, token.isSpecial ? 6 : 5)
-                                                            .padding(.vertical, 3)
-                                                            .foregroundColor(token.color)
-                                                            .background(
-                                                                RoundedRectangle(cornerRadius: 4)
-                                                                    .fill(token.color.opacity(0.18))
-                                                            )
-                                                            .overlay(
-                                                                RoundedRectangle(cornerRadius: 4)
-                                                                    .stroke(token.color.opacity(0.40), lineWidth: 0.8)
-                                                            )
+                                                    Button(action: {
+                                                        state.startRecording(category: category, index: index, variantIndex: 0)
+                                                    }) {
+                                                        HStack(spacing: 4) {
+                                                            Image(systemName: "record.circle")
+                                                                .font(.system(size: 12, weight: .semibold))
+                                                                .foregroundColor(accent)
+                                                            Text("Record Shortcut")
+                                                                .font(.system(size: 11, weight: .semibold))
+                                                                .foregroundColor(accent)
+                                                        }
+                                                        .padding(.horizontal, 8)
+                                                        .padding(.vertical, 4)
+                                                        .background(accent.opacity(0.12))
+                                                        .cornerRadius(6)
+                                                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(accent.opacity(0.35), lineWidth: 1))
+                                                    }
+                                                    .buttonStyle(PlainButtonStyle())
+                                                }
+                                            } else {
+                                                // Render each variant individually
+                                                ForEach(Array(variants.enumerated()), id: \.offset) { vIdx, vKeys in
+                                                    if vIdx > 0 {
+                                                        Text("/")
+                                                            .font(.system(size: 11, weight: .semibold))
+                                                            .foregroundColor(Color.white.opacity(0.40))
+                                                    }
+
+                                                    let isRecordingThisVariant = (state.recordingCategory == category && state.recordingIndex == index && state.recordingVariantIndex == vIdx)
+
+                                                    if isRecordingThisVariant {
+                                                        // Active Recording Indicator Pill
+                                                        HStack(spacing: 6) {
+                                                            Circle().fill(Color.red).frame(width: 8, height: 8)
+                                                            Text("Type shortcut...").font(.system(size: 11, weight: .bold)).foregroundColor(.white)
+                                                            Button(action: { state.stopRecording() }) {
+                                                                Image(systemName: "xmark.circle.fill").foregroundColor(.white.opacity(0.7)).font(.system(size: 11))
+                                                            }
+                                                            .buttonStyle(PlainButtonStyle())
+                                                        }
+                                                        .padding(.horizontal, 8).padding(.vertical, 4)
+                                                        .background(RoundedRectangle(cornerRadius: 6).fill(Color.red.opacity(0.18)))
+                                                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.red.opacity(0.6), lineWidth: 1.2))
+                                                    } else {
+                                                        HStack(spacing: 4) {
+                                                            // Colored tokens for this variant
+                                                            let tokens = KeyTokenParser.parse(vKeys)
+                                                            HStack(spacing: 3) {
+                                                                ForEach(Array(tokens.enumerated()), id: \.offset) { _, token in
+                                                                    Text(token.text)
+                                                                        .font(.system(size: token.isSpecial ? 11 : 10, weight: .bold, design: .monospaced))
+                                                                        .padding(.horizontal, token.isSpecial ? 5 : 4)
+                                                                        .padding(.vertical, 2)
+                                                                        .foregroundColor(token.color)
+                                                                        .background(RoundedRectangle(cornerRadius: 4).fill(token.color.opacity(0.18)))
+                                                                        .overlay(RoundedRectangle(cornerRadius: 4).stroke(token.color.opacity(0.40), lineWidth: 0.8))
+                                                                }
+                                                            }
+
+                                                            // Re-record this specific variant button
+                                                            Button(action: {
+                                                                state.startRecording(category: category, index: index, variantIndex: vIdx)
+                                                            }) {
+                                                                Image(systemName: "arrow.clockwise")
+                                                                    .font(.system(size: 9, weight: .bold))
+                                                                    .foregroundColor(accent)
+                                                                    .padding(2)
+                                                            }
+                                                            .buttonStyle(PlainButtonStyle())
+                                                            .help("Re-record this key variant")
+
+                                                            // Delete this specific variant button
+                                                            Button(action: {
+                                                                state.deleteVariant(category: category, index: index, variantIndex: vIdx)
+                                                            }) {
+                                                                Image(systemName: "xmark")
+                                                                    .font(.system(size: 8, weight: .bold))
+                                                                    .foregroundColor(.secondary)
+                                                                    .padding(2)
+                                                            }
+                                                            .buttonStyle(PlainButtonStyle())
+                                                            .help("Delete this key variant")
+                                                        }
+                                                        .padding(.horizontal, 6)
+                                                        .padding(.vertical, 3)
+                                                        .background(Color.white.opacity(0.04))
+                                                        .cornerRadius(6)
+                                                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.12), lineWidth: 1))
                                                     }
                                                 }
-                                            }
-                                            .padding(.horizontal, 6)
-                                            .padding(.vertical, 3)
-                                            .background(Color.white.opacity(0.04))
-                                            .cornerRadius(6)
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 6)
-                                                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
-                                            )
 
-                                            // 1-Click Record Button
-                                            Button(action: {
-                                                state.startRecording(category: category, index: index)
-                                            }) {
-                                                HStack(spacing: 4) {
-                                                    Image(systemName: "record.circle")
-                                                        .font(.system(size: 12, weight: .semibold))
+                                                // Check if currently recording a new alternate
+                                                let isRecordingNewAlternate = (state.recordingCategory == category && state.recordingIndex == index && state.recordingVariantIndex == nil)
+                                                if isRecordingNewAlternate {
+                                                    HStack(spacing: 6) {
+                                                        Circle().fill(Color.red).frame(width: 8, height: 8)
+                                                        Text("Type shortcut...").font(.system(size: 11, weight: .bold)).foregroundColor(.white)
+                                                        Button(action: { state.stopRecording() }) {
+                                                            Image(systemName: "xmark.circle.fill").foregroundColor(.white.opacity(0.7)).font(.system(size: 11))
+                                                        }
+                                                        .buttonStyle(PlainButtonStyle())
+                                                    }
+                                                    .padding(.horizontal, 8).padding(.vertical, 4)
+                                                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.red.opacity(0.18)))
+                                                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.red.opacity(0.6), lineWidth: 1.2))
+                                                } else {
+                                                    // Button to Add New Alternate Variant
+                                                    Button(action: {
+                                                        state.startRecording(category: category, index: index, variantIndex: nil)
+                                                    }) {
+                                                        HStack(spacing: 3) {
+                                                            Image(systemName: "plus")
+                                                                .font(.system(size: 9, weight: .bold))
+                                                            Text("Or")
+                                                                .font(.system(size: 10, weight: .bold))
+                                                        }
                                                         .foregroundColor(accent)
-                                                    Text("Record")
-                                                        .font(.system(size: 11, weight: .semibold))
-                                                        .foregroundColor(accent)
+                                                        .padding(.horizontal, 6)
+                                                        .padding(.vertical, 3)
+                                                        .background(accent.opacity(0.12))
+                                                        .cornerRadius(5)
+                                                        .overlay(RoundedRectangle(cornerRadius: 5).stroke(accent.opacity(0.35), lineWidth: 1))
+                                                    }
+                                                    .buttonStyle(PlainButtonStyle())
+                                                    .help("Add an alternate key combination for this shortcut (e.g. j / ↓)")
                                                 }
-                                                .padding(.horizontal, 8)
-                                                .padding(.vertical, 4)
-                                                .background(accent.opacity(0.12))
-                                                .cornerRadius(6)
-                                                .overlay(
-                                                    RoundedRectangle(cornerRadius: 6)
-                                                        .stroke(accent.opacity(0.35), lineWidth: 1)
-                                                )
-                                            }
-                                            .buttonStyle(PlainButtonStyle())
-                                            .help("Press keys on keyboard to record shortcut")
-
-                                            // Clear shortcut button (if keys present)
-                                            if !currentKeys.isEmpty {
-                                                Button(action: {
-                                                    state.updateShortcut(category: category, index: index, title: currentTitle, keys: "")
-                                                }) {
-                                                    Image(systemName: "xmark")
-                                                        .font(.system(size: 9, weight: .bold))
-                                                        .foregroundColor(.secondary)
-                                                        .padding(4)
-                                                }
-                                                .buttonStyle(PlainButtonStyle())
-                                                .help("Clear shortcut")
                                             }
                                         }
 
