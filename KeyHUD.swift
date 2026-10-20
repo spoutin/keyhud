@@ -106,6 +106,22 @@ enum ColorSchemeMode: String, CaseIterable, Identifiable {
     }
 }
 
+enum SearchScope: String, CaseIterable, Identifiable {
+    case current = "Current View"
+    case currentAndSubApps = "Current + Sub-tools"
+    case global = "All / Global"
+
+    var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .current: return "macwindow"
+        case .currentAndSubApps: return "square.stack.3d.up"
+        case .global: return "globe"
+        }
+    }
+}
+
 // MARK: - App Settings & Preferences
 
 class AppSettings: ObservableObject {
@@ -115,6 +131,11 @@ class AppSettings: ObservableObject {
         didSet {
             UserDefaults.standard.set(appearanceMode, forKey: "appearanceMode")
             updateWindowsAppearance()
+        }
+    }
+    @Published var defaultSearchScope: String {
+        didSet {
+            UserDefaults.standard.set(defaultSearchScope, forKey: "defaultSearchScope")
         }
     }
     @Published var widthPercent: Double {
@@ -191,6 +212,9 @@ class AppSettings: ObservableObject {
     init() {
         let savedApp = UserDefaults.standard.string(forKey: "appearanceMode")
         self.appearanceMode = (savedApp != nil && ColorSchemeMode(rawValue: savedApp!) != nil) ? savedApp! : ColorSchemeMode.dark.rawValue
+
+        let savedSearchScope = UserDefaults.standard.string(forKey: "defaultSearchScope")
+        self.defaultSearchScope = (savedSearchScope != nil && SearchScope(rawValue: savedSearchScope!) != nil) ? savedSearchScope! : SearchScope.current.rawValue
 
         let savedW = UserDefaults.standard.double(forKey: "widthPercent")
         self.widthPercent = (savedW >= 20 && savedW <= 100) ? savedW : 75.0
@@ -1166,6 +1190,12 @@ class SearchState: ObservableObject {
             selectedItemIndex = 0
         }
     }
+    @Published var activeSearchScope: SearchScope = .current {
+        didSet {
+            selectedGroupIndex = 0
+            selectedItemIndex = 0
+        }
+    }
 }
 
 // MARK: - Auto-Focusing Native Search Field with 2D Arrow Navigation
@@ -1449,12 +1479,34 @@ struct HUDView: View {
         }
     }
 
+    var searchableGroups: [ShortcutGroup] {
+        switch searchState.activeSearchScope {
+        case .current:
+            return currentScopeGroups
+        case .currentAndSubApps:
+            return groups
+        case .global:
+            var all = groups
+            for grp in AeroSpaceConfigParser.parse() {
+                if !all.contains(where: { $0.title == grp.title }) {
+                    all.append(grp)
+                }
+            }
+            for grp in MacOSGlobalShortcuts.getGroups() {
+                if !all.contains(where: { $0.title == grp.title }) {
+                    all.append(grp)
+                }
+            }
+            return all
+        }
+    }
+
     var filteredGroups: [ShortcutGroup] {
         let q = searchState.query.trimmingCharacters(in: .whitespaces).lowercased()
         if q.isEmpty {
             return currentScopeGroups
         }
-        return currentScopeGroups.compactMap { group in
+        return searchableGroups.compactMap { group in
             let filteredItems = group.items.filter {
                 $0.title.lowercased().contains(q) || $0.keys.lowercased().contains(q)
             }
