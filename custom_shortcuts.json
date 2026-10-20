@@ -1,71 +1,422 @@
 {
-  "com.mitchellh.ghostty": {
-    "Ghostty & Herdr": [
-      { "title": "Ghostty Command Palette", "keys": "⇧⌘P" },
-      { "title": "Split Horizontal", "keys": "⌃S -" },
-      { "title": "Split Vertical", "keys": "⌃S |" },
-      { "title": "Focus Pane Left", "keys": "⌃S h" },
-      { "title": "Focus Pane Down", "keys": "⌃S j" },
-      { "title": "Focus Pane Up", "keys": "⌃S k" },
-      { "title": "Focus Pane Right", "keys": "⌃S l" },
-      { "title": "Toggle Neovim Sidebar", "keys": "⌃S e" },
-      { "title": "Pick File from Agent Output", "keys": "⌃S o" }
+  "com.mitchellh.ghostty" : {
+    "Ghostty & Herdr" : [
+      {
+        "keys" : "⇧⌘P",
+        "title" : "Ghostty Command Palette"
+      },
+      {
+        "keys" : "⌃S -",
+        "title" : "Split Horizontal"
+      },
+      {
+        "keys" : "⌃S |",
+        "title" : "Split Vertical"
+      },
+      {
+        "keys" : "⌃S h",
+        "title" : "Focus Pane Left"
+      },
+      {
+        "keys" : "⌃S j",
+        "title" : "Focus Pane Down"
+      },
+      {
+        "keys" : "⌃S k",
+        "title" : "Focus Pane Up"
+      },
+      {
+        "keys" : "⌃S l",
+        "title" : "Focus Pane Right"
+      },
+      {
+        "keys" : "⌃S e",
+        "title" : "Toggle Neovim Sidebar"
+      },
+      {
+        "keys" : "⌃S o",
+        "title" : "Pick File from Output"
+      }
     ],
-    "Zsh & Shell": [
-      { "title": "Atuin History Search", "keys": "⌃R" },
-      { "title": "FZF File Picker", "keys": "⌃T" },
-      { "title": "FZF Directory Jump", "keys": "⌥C" },
-      { "title": "Forward Word (Ghostty)", "keys": "⌥F" },
-      { "title": "Backward Word (Ghostty)", "keys": "⌥B" },
-      { "title": "FZF-Tab Toggle Select", "keys": "⌥Space" },
-      { "title": "FZF-Tab Next / Prev Item", "keys": "Tab / ⇧Tab" },
-      { "title": "Enter Vi-Mode Normal", "keys": "Esc" },
-      { "title": "Edit Line in Neovim", "keys": "v in Normal" },
-      { "title": "Expand Alias Inline", "keys": "⌃X a" }
+    "Neovim: Edits & Leader" : [
+      {
+        "keys" : "ciw \/ diw \/ yiw",
+        "title" : "Change \/ Delete \/ Yank Word"
+      },
+      {
+        "keys" : "ci\" \/ ci'",
+        "title" : "Change Inside Quotes \/ Parens"
+      },
+      {
+        "keys" : "gcc",
+        "title" : "Toggle Line Comment"
+      },
+      {
+        "keys" : ".",
+        "title" : "Repeat Last Change"
+      },
+      {
+        "keys" : "u \/ ⌃r",
+        "title" : "Undo \/ Redo"
+      },
+      {
+        "keys" : "<Space>ff",
+        "title" : "Find Files in Project"
+      },
+      {
+        "keys" : "<Space>\/",
+        "title" : "Live Grep Project"
+      },
+      {
+        "keys" : "<Space>e",
+        "title" : "File Explorer Neo-tree"
+      },
+      {
+        "keys" : "gd",
+        "title" : "Go to Definition"
+      },
+      {
+        "keys" : "K",
+        "title" : "Hover Documentation"
+      },
+      {
+        "keys" : "<Space>ca",
+        "title" : "Code Action"
+      },
+      {
+        "keys" : "<Space>cf",
+        "title" : "Format Document"
+      },
+      {
+        "keys" : "<Space>cr",
+        "title" : "Rename Symbol"
+      }
     ],
-    "Neovim: Movements & Jumps": [
-      { "title": "Move Cursor Left / Down / Up / Right", "keys": "h / j / k / l" },
-      { "title": "Word Forward / Backward / End", "keys": "w / b / e" },
-      { "title": "Big-Word Forward / Backward / End", "keys": "W / B / E" },
-      { "title": "Line Start / First Non-Blank / End", "keys": "0 / ^ / $" },
-      { "title": "File Top / File Bottom", "keys": "gg / G" },
-      { "title": "Half-Page Scroll Up / Down", "keys": "⌃u / ⌃d" },
-      { "title": "Full-Page Scroll Up / Down", "keys": "⌃b / ⌃f" },
-      { "title": "Center Screen on Cursor", "keys": "zz" },
-      { "title": "Scroll Cursor to Top / Bottom", "keys": "zt / zb" },
-      { "title": "Find Char on Line Fwd / Back", "keys": "f / F" },
-      { "title": "Till Char Fwd / Back", "keys": "t / T" },
-      { "title": "Repeat Char Find / Reverse", "keys": "; / ," },
-      { "title": "Jump to Matching Bracket", "keys": "%" },
-      { "title": "Jump Backward / Forward", "keys": "⌃o / ⌃i" },
-      { "title": "Search Word Under Cursor", "keys": "* / #" }
+    "Neovim: Movements & Jumps" : [
+      {
+        "keys" : "h \/ j \/ k \/ l",
+        "title" : "Move Cursor Left \/ Down \/ Up \/ Right"
+      },
+      {
+        "keys" : "w \/ b \/ e",
+        "title" : "Word Forward \/ Backward \/ End"
+      },
+      {
+        "keys" : "W \/ B \/ E",
+        "title" : "Big-Word Forward \/ Backward \/ End"
+      },
+      {
+        "keys" : "0 \/ ^ \/ $",
+        "title" : "Line Start \/ First Non-Blank \/ End"
+      },
+      {
+        "keys" : "gg \/ G",
+        "title" : "File Top \/ File Bottom"
+      },
+      {
+        "keys" : "⌃u \/ ⌃d",
+        "title" : "Half-Page Scroll Up \/ Down"
+      },
+      {
+        "keys" : "⌃b \/ ⌃f",
+        "title" : "Full-Page Scroll Up \/ Down"
+      },
+      {
+        "keys" : "zz",
+        "title" : "Center Screen on Cursor"
+      },
+      {
+        "keys" : "zt \/ zb",
+        "title" : "Scroll Cursor to Top \/ Bottom"
+      },
+      {
+        "keys" : "f \/ F",
+        "title" : "Find Char on Line Fwd \/ Back"
+      },
+      {
+        "keys" : "t \/ T",
+        "title" : "Till Char Fwd \/ Back"
+      },
+      {
+        "keys" : "; \/ ,",
+        "title" : "Repeat Char Find \/ Reverse"
+      },
+      {
+        "keys" : "%",
+        "title" : "Jump to Matching Bracket"
+      },
+      {
+        "keys" : "⌃o \/ ⌃i",
+        "title" : "Jump Backward \/ Forward"
+      },
+      {
+        "keys" : "* \/ #",
+        "title" : "Search Word Under Cursor"
+      }
     ],
-    "Neovim: Windows & Splits": [
-      { "title": "Focus Left Window / Split", "keys": "⌃h" },
-      { "title": "Focus Down / Resize Height -2", "keys": "⌃j" },
-      { "title": "Focus Up / Resize Height +2", "keys": "⌃k" },
-      { "title": "Focus Right / Resize Width -2", "keys": "⌃l" },
-      { "title": "Split Window Below", "keys": "<Space>w-" },
-      { "title": "Split Window Right", "keys": "<Space>w|" },
-      { "title": "Close Current Split Window", "keys": "<Space>wd" },
-      { "title": "Previous / Next Buffer", "keys": "[b / ]b" },
-      { "title": "Close Current Buffer", "keys": "<Space>bd" },
-      { "title": "Switch Buffer", "keys": "<Space>bb" }
+    "Neovim: Windows & Splits" : [
+      {
+        "keys" : "⌃h",
+        "title" : "Focus Left Window \/ Split"
+      },
+      {
+        "keys" : "⌃j",
+        "title" : "Focus Down Window \/ Split"
+      },
+      {
+        "keys" : "⌃k",
+        "title" : "Focus Up Window \/ Split"
+      },
+      {
+        "keys" : "⌃l",
+        "title" : "Focus Right Window \/ Split"
+      },
+      {
+        "keys" : "⌃K",
+        "title" : "Resize Height +2"
+      },
+      {
+        "keys" : "⌃J",
+        "title" : "Resize Height -2"
+      },
+      {
+        "keys" : "⌃H",
+        "title" : "Resize Width +2"
+      },
+      {
+        "keys" : "⌃L",
+        "title" : "Resize Width -2"
+      },
+      {
+        "keys" : "<Space>w-",
+        "title" : "Split Window Below"
+      },
+      {
+        "keys" : "<Space>w|",
+        "title" : "Split Window Right"
+      },
+      {
+        "keys" : "<Space>wd",
+        "title" : "Close Current Split Window"
+      },
+      {
+        "keys" : "[b \/ ]b",
+        "title" : "Previous \/ Next Buffer"
+      },
+      {
+        "keys" : "<Space>bd",
+        "title" : "Close Current Buffer"
+      },
+      {
+        "keys" : "<Space>bb",
+        "title" : "Switch Buffer"
+      }
     ],
-    "Neovim: Edits & Leader": [
-      { "title": "Change / Delete / Yank Word", "keys": "ciw / diw / yiw" },
-      { "title": "Change Inside Quotes / Parens", "keys": "ci\" / ci'" },
-      { "title": "Toggle Line Comment", "keys": "gcc" },
-      { "title": "Repeat Last Change", "keys": "." },
-      { "title": "Undo / Redo", "keys": "u / ⌃r" },
-      { "title": "Find Files in Project", "keys": "<Space>ff" },
-      { "title": "Live Grep Project", "keys": "<Space>/" },
-      { "title": "File Explorer Neo-tree", "keys": "<Space>e" },
-      { "title": "Go to Definition", "keys": "gd" },
-      { "title": "Hover Documentation", "keys": "K" },
-      { "title": "Code Action", "keys": "<Space>ca" },
-      { "title": "Format Document", "keys": "<Space>cf" },
-      { "title": "Rename Symbol", "keys": "<Space>cr" }
+    "Zsh & Shell" : [
+      {
+        "keys" : "⌃R",
+        "title" : "Atuin History Search"
+      },
+      {
+        "keys" : "⌃T",
+        "title" : "FZF File Picker"
+      },
+      {
+        "keys" : "⌥C",
+        "title" : "FZF Directory Jump"
+      },
+      {
+        "keys" : "⌥F",
+        "title" : "Forward Word (Ghostty)"
+      },
+      {
+        "keys" : "⌥B",
+        "title" : "Backward Word (Ghostty)"
+      },
+      {
+        "keys" : "⌥Space",
+        "title" : "FZF-Tab Toggle Select"
+      },
+      {
+        "keys" : "Tab \/ ⇧Tab",
+        "title" : "FZF-Tab Next \/ Prev"
+      },
+      {
+        "keys" : "Esc",
+        "title" : "Enter Vi-Mode Normal"
+      },
+      {
+        "keys" : "v in Normal",
+        "title" : "Edit Line in Neovim"
+      },
+      {
+        "keys" : "⌃X a",
+        "title" : "Expand Alias Inline"
+      }
+    ],
+    "K9s: Kubernetes" : [
+      {
+        "keys" : ":pods",
+        "title" : "Pods View"
+      },
+      {
+        "keys" : ":deploy",
+        "title" : "Deployments View"
+      },
+      {
+        "keys" : ":svc",
+        "title" : "Services View"
+      },
+      {
+        "keys" : ":ns",
+        "title" : "Switch Namespaces"
+      },
+      {
+        "keys" : ":ctx",
+        "title" : "Switch Contexts"
+      },
+      {
+        "keys" : "\/",
+        "title" : "Filter Resources"
+      },
+      {
+        "keys" : "Esc",
+        "title" : "Clear Filter \/ Back"
+      },
+      {
+        "keys" : "d",
+        "title" : "Describe Resource"
+      },
+      {
+        "keys" : "l",
+        "title" : "View Pod Logs"
+      },
+      {
+        "keys" : "s",
+        "title" : "Shell Exec into Pod"
+      },
+      {
+        "keys" : "e",
+        "title" : "Edit Resource YAML"
+      },
+      {
+        "keys" : "w",
+        "title" : "Toggle Wrap Logs"
+      },
+      {
+        "keys" : "⌃D",
+        "title" : "Delete Resource"
+      }
+    ],
+    "Lazygit: Git TUI" : [
+      {
+        "keys" : "1",
+        "title" : "Status Panel"
+      },
+      {
+        "keys" : "2",
+        "title" : "Files Panel"
+      },
+      {
+        "keys" : "3",
+        "title" : "Branches Panel"
+      },
+      {
+        "keys" : "4",
+        "title" : "Commits Panel"
+      },
+      {
+        "keys" : "5",
+        "title" : "Stash Panel"
+      },
+      {
+        "keys" : "[ \/ ]",
+        "title" : "Previous \/ Next Tab"
+      },
+      {
+        "keys" : "Space",
+        "title" : "Stage \/ Toggle File or Hunk"
+      },
+      {
+        "keys" : "c",
+        "title" : "Commit Changes"
+      },
+      {
+        "keys" : "A",
+        "title" : "Amend Commit"
+      },
+      {
+        "keys" : "P",
+        "title" : "Push to Remote"
+      },
+      {
+        "keys" : "p",
+        "title" : "Pull from Remote"
+      },
+      {
+        "keys" : "b",
+        "title" : "Branch Menu \/ Checkout"
+      },
+      {
+        "keys" : "z",
+        "title" : "Undo Action"
+      }
+    ],
+    "Atuin: Shell History" : [
+      {
+        "keys" : "⌃R",
+        "title" : "Interactive History Search"
+      },
+      {
+        "keys" : "⌃E",
+        "title" : "Edit Search Query"
+      },
+      {
+        "keys" : "Tab",
+        "title" : "Inspect Command Details"
+      },
+      {
+        "keys" : "⌃O",
+        "title" : "Execute Command Immediately"
+      },
+      {
+        "keys" : "⌃P \/ ⌃N",
+        "title" : "Previous \/ Next Result"
+      },
+      {
+        "keys" : "⌥1 .. ⌥4",
+        "title" : "Filter: Global \/ Host \/ Session \/ Dir"
+      }
+    ],
+    "VisiData: Data Tables" : [
+      {
+        "keys" : "q",
+        "title" : "Quit Sheet \/ Back"
+      },
+      {
+        "keys" : "^",
+        "title" : "Set Column as Key"
+      },
+      {
+        "keys" : "[ \/ ]",
+        "title" : "Sort Ascending \/ Descending"
+      },
+      {
+        "keys" : "F",
+        "title" : "Frequency Summary Table"
+      },
+      {
+        "keys" : "s \/ t \/ u",
+        "title" : "Select \/ Toggle \/ Unselect Row"
+      },
+      {
+        "keys" : "\"",
+        "title" : "Duplicate Selected Rows"
+      },
+      {
+        "keys" : "⌃S",
+        "title" : "Save Sheet to File"
+      }
     ]
   }
 }

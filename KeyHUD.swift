@@ -210,8 +210,13 @@ class AppSettings: ObservableObject {
         self.isPinned = UserDefaults.standard.bool(forKey: "isPinned")
         self.launchAtLogin = LaunchAtLoginManager.shared.isEnabled
 
-        let savedHidden = UserDefaults.standard.stringArray(forKey: "ghosttyHiddenCategories") ?? []
-        self.ghosttyHiddenCategories = Set(savedHidden)
+        let savedHidden = UserDefaults.standard.stringArray(forKey: "ghosttyHiddenCategories")
+        if let hidden = savedHidden {
+            self.ghosttyHiddenCategories = Set(hidden)
+        } else {
+            // Default new TUI categories to sub-menu only
+            self.ghosttyHiddenCategories = Set(["K9s: Kubernetes", "Lazygit: Git TUI", "Atuin: Shell History", "VisiData: Data Tables"])
+        }
     }
 }
 
@@ -488,6 +493,60 @@ class CustomShortcutsManager {
         ])
         ghosttyConfig["Neovim: Windows & Splits"] = customWindowItems
         detectedCount += customWindowItems.count
+
+        // 4. K9s, Lazygit, Atuin, VisiData TUI detection
+        let k9sConfigPath = "\(home)/.config/k9s"
+        if FileManager.default.fileExists(atPath: k9sConfigPath) && ghosttyConfig["K9s: Kubernetes"] == nil {
+            ghosttyConfig["K9s: Kubernetes"] = [
+                ["title": "Pods View", "keys": ":pods"],
+                ["title": "Deployments View", "keys": ":deploy"],
+                ["title": "Services View", "keys": ":svc"],
+                ["title": "Switch Namespaces", "keys": ":ns"],
+                ["title": "Switch Contexts", "keys": ":ctx"],
+                ["title": "Filter Resources", "keys": "/"],
+                ["title": "Clear Filter / Back", "keys": "Esc"],
+                ["title": "Describe Resource", "keys": "d"],
+                ["title": "View Pod Logs", "keys": "l"],
+                ["title": "Shell Exec into Pod", "keys": "s"],
+                ["title": "Edit Resource YAML", "keys": "e"],
+                ["title": "Toggle Wrap Logs", "keys": "w"],
+                ["title": "Delete Resource", "keys": "⌃D"]
+            ]
+            detectedCount += 13
+        }
+
+        let lazygitConfigPath = "\(home)/.config/lazygit"
+        if FileManager.default.fileExists(atPath: lazygitConfigPath) && ghosttyConfig["Lazygit: Git TUI"] == nil {
+            ghosttyConfig["Lazygit: Git TUI"] = [
+                ["title": "Status Panel", "keys": "1"],
+                ["title": "Files Panel", "keys": "2"],
+                ["title": "Branches Panel", "keys": "3"],
+                ["title": "Commits Panel", "keys": "4"],
+                ["title": "Stash Panel", "keys": "5"],
+                ["title": "Previous / Next Tab", "keys": "[ / ]"],
+                ["title": "Stage / Toggle File or Hunk", "keys": "Space"],
+                ["title": "Commit Changes", "keys": "c"],
+                ["title": "Amend Commit", "keys": "A"],
+                ["title": "Push to Remote", "keys": "P"],
+                ["title": "Pull from Remote", "keys": "p"],
+                ["title": "Branch Menu / Checkout", "keys": "b"],
+                ["title": "Undo Action", "keys": "z"]
+            ]
+            detectedCount += 13
+        }
+
+        let atuinConfigPath = "\(home)/.config/atuin"
+        if FileManager.default.fileExists(atPath: atuinConfigPath) && ghosttyConfig["Atuin: Shell History"] == nil {
+            ghosttyConfig["Atuin: Shell History"] = [
+                ["title": "Interactive History Search", "keys": "⌃R"],
+                ["title": "Edit Search Query", "keys": "⌃E"],
+                ["title": "Inspect Command Details", "keys": "Tab"],
+                ["title": "Execute Command Immediately", "keys": "⌃O"],
+                ["title": "Previous / Next Result", "keys": "⌃P / ⌃N"],
+                ["title": "Filter: Global / Host / Session / Dir", "keys": "⌥1 .. ⌥4"]
+            ]
+            detectedCount += 6
+        }
 
         var fullConfig = loadConfig()
         fullConfig["com.mitchellh.ghostty"] = ghosttyConfig
