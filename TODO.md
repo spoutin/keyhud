@@ -130,10 +130,10 @@
 
 ## 🔮 Future Roadmap (Feature Ideas from Market Alternatives)
 
-- [ ] **Hide Known / Muscle-Memory Shortcuts**
-  - [ ] Add an "Eye" / "Hide" action on shortcuts to mark them as known/hidden.
-  - [ ] Toggle in HUD header or Settings to show/hide known shortcuts (`⌘C`, `⌘V`, `⌘Z`, `⌘Q`, etc.) to dramatically cut visual clutter.
-  - [ ] Manage hidden shortcuts list in Settings under Shortcuts & Editor.
+- [x] **Hide Known / Muscle-Memory Shortcuts**
+  - [x] Add an "Eye" / "Hide" action on shortcuts to mark them as known/hidden.
+  - [x] Toggle in HUD header or Settings to show/hide known shortcuts (`⌘C`, `⌘V`, `⌘Z`, `⌘Q`, etc.) to dramatically cut visual clutter.
+  - [x] Manage hidden shortcuts list in Settings under Shortcuts & Editor.
 
 - [ ] **Universal Command Palette Mode (Paletro-style)**
   - [ ] Option to index all menu bar items (including those without keyboard shortcuts) in `MenuScanner`.

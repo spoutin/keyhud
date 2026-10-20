@@ -366,6 +366,89 @@ class FavoritesManager: ObservableObject {
     }
 }
 
+// MARK: - Hidden Items Manager (Hide Known Shortcuts & Columns)
+
+class HiddenItemsManager: ObservableObject {
+    static let shared = HiddenItemsManager()
+    private let categoriesStorageKey = "hiddenCategoriesByApp"
+    private let itemsStorageKey = "hiddenItemsByApp"
+
+    @Published var hiddenCategories: [String: Set<String>] = [:]
+    @Published var hiddenItems: [String: Set<String>] = [:]
+
+    init() {
+        load()
+    }
+
+    func load() {
+        if let catDict = UserDefaults.standard.dictionary(forKey: categoriesStorageKey) as? [String: [String]] {
+            var loadedCats: [String: Set<String>] = [:]
+            for (k, v) in catDict {
+                loadedCats[k] = Set(v)
+            }
+            self.hiddenCategories = loadedCats
+        }
+
+        if let itemDict = UserDefaults.standard.dictionary(forKey: itemsStorageKey) as? [String: [String]] {
+            var loadedItems: [String: Set<String>] = [:]
+            for (k, v) in itemDict {
+                loadedItems[k] = Set(v)
+            }
+            self.hiddenItems = loadedItems
+        }
+    }
+
+    private func save() {
+        var catDict: [String: [String]] = [:]
+        for (k, v) in hiddenCategories {
+            catDict[k] = Array(v).sorted()
+        }
+        UserDefaults.standard.set(catDict, forKey: categoriesStorageKey)
+
+        var itemDict: [String: [String]] = [:]
+        for (k, v) in hiddenItems {
+            itemDict[k] = Array(v).sorted()
+        }
+        UserDefaults.standard.set(itemDict, forKey: itemsStorageKey)
+    }
+
+    private func itemKey(bundleID: String, category: String) -> String {
+        return "\(bundleID)::\(category)"
+    }
+
+    func isCategoryHidden(bundleID: String, category: String) -> Bool {
+        return hiddenCategories[bundleID]?.contains(category) ?? false
+    }
+
+    func toggleCategoryHidden(bundleID: String, category: String) {
+        var set = hiddenCategories[bundleID] ?? Set<String>()
+        if set.contains(category) {
+            set.remove(category)
+        } else {
+            set.insert(category)
+        }
+        hiddenCategories[bundleID] = set
+        save()
+    }
+
+    func isItemHidden(bundleID: String, category: String, title: String) -> Bool {
+        let key = itemKey(bundleID: bundleID, category: category)
+        return hiddenItems[key]?.contains(title) ?? false
+    }
+
+    func toggleItemHidden(bundleID: String, category: String, title: String) {
+        let key = itemKey(bundleID: bundleID, category: category)
+        var set = hiddenItems[key] ?? Set<String>()
+        if set.contains(title) {
+            set.remove(title)
+        } else {
+            set.insert(title)
+        }
+        hiddenItems[key] = set
+        save()
+    }
+}
+
 // MARK: - Key Combo Decoder for Recording
 
 struct KeyComboDecoder {
@@ -1602,6 +1685,12 @@ class SearchState: ObservableObject {
             selectedItemIndex = 0
         }
     }
+    @Published var showHiddenItems: Bool = false {
+        didSet {
+            selectedGroupIndex = 0
+            selectedItemIndex = 0
+        }
+    }
 
     var canGoBack: Bool { !scopeHistory.isEmpty }
 
@@ -1801,6 +1890,7 @@ struct ShortcutRow: View {
     let isSelected: Bool
     let isHovered: Bool
     let isBookmarked: Bool
+    var isHiddenShortcut: Bool = false
     var isOddRow: Bool = false
     let accentColor: Color
     let onSelect: () -> Void
@@ -1819,6 +1909,13 @@ struct ShortcutRow: View {
         HStack(spacing: 0) {
             Button(action: onSelect) {
                 HStack(alignment: .center, spacing: 6) {
+                    if isHiddenShortcut {
+                        Image(systemName: "eye.slash.fill")
+                            .font(.system(size: 9))
+                            .foregroundColor(.orange)
+                            .frame(width: 12, height: 12)
+                    }
+
                     // Bookmark Star Icon Button
                     Button(action: onToggleBookmark) {
                         Image(systemName: isBookmarked ? "star.fill" : "star")
@@ -1831,7 +1928,8 @@ struct ShortcutRow: View {
 
                     Text(item.title)
                         .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
-                        .foregroundColor(isSelected ? .white : (isHovered ? .white : .white.opacity(0.88)))
+                        .foregroundColor(isSelected ? .white : (isHiddenShortcut ? .white.opacity(0.40) : (isHovered ? .white : .white.opacity(0.88))))
+                        .strikethrough(isHiddenShortcut && !isSelected, color: Color.orange.opacity(0.5))
                         .lineLimit(1)
 
                     Spacer(minLength: 8)
@@ -1975,11 +2073,27 @@ struct HUDView: View {
     @ObservedObject var searchState: SearchState
     @ObservedObject var settings = AppSettings.shared
     @ObservedObject var favorites = FavoritesManager.shared
+    @ObservedObject var hiddenManager = HiddenItemsManager.shared
 
     var appName: String { viewModel.appName }
     var bundleID: String { viewModel.bundleID }
     var appIcon: NSImage? { viewModel.appIcon }
     var groups: [ShortcutGroup] { viewModel.groups }
+
+    var currentScopeBundleID: String {
+        switch searchState.selectedScope {
+        case .activeApp:
+            return bundleID
+        case .ghosttyTool:
+            return "com.mitchellh.ghostty"
+        case .runningApp(let bID, _, _):
+            return bID
+        case .aerospace:
+            return "aerospace"
+        case .macos:
+            return "macos"
+        }
+    }
 
     var currentScopeStorageKey: String {
         switch searchState.selectedScope {
@@ -2026,7 +2140,19 @@ struct HUDView: View {
     }
 
     var currentScopeGroups: [ShortcutGroup] {
-        let baseGroups = rawScopeGroups
+        let bID = currentScopeBundleID
+        var baseGroups = rawScopeGroups
+
+        if !searchState.showHiddenItems {
+            baseGroups = baseGroups.compactMap { grp in
+                if hiddenManager.isCategoryHidden(bundleID: bID, category: grp.title) {
+                    return nil
+                }
+                let visible = grp.items.filter { !hiddenManager.isItemHidden(bundleID: bID, category: grp.title, title: $0.title) }
+                return visible.isEmpty ? nil : ShortcutGroup(title: grp.title, items: visible)
+            }
+        }
+
         let key = currentScopeStorageKey
         let bookmarkedTitles = favorites.bookmarks(for: key)
 
@@ -2058,11 +2184,22 @@ struct HUDView: View {
         case .current:
             return currentScopeGroups
         case .currentAndSubApps:
+            var allGroups = groups
+            if !searchState.showHiddenItems {
+                let bID = currentScopeBundleID
+                allGroups = allGroups.compactMap { grp in
+                    if hiddenManager.isCategoryHidden(bundleID: bID, category: grp.title) {
+                        return nil
+                    }
+                    let visible = grp.items.filter { !hiddenManager.isItemHidden(bundleID: bID, category: grp.title, title: $0.title) }
+                    return visible.isEmpty ? nil : ShortcutGroup(title: grp.title, items: visible)
+                }
+            }
             let key = currentScopeStorageKey
             let bookmarkedTitles = favorites.bookmarks(for: key)
             if !bookmarkedTitles.isEmpty {
                 var favItems: [ShortcutItem] = []
-                for grp in groups {
+                for grp in allGroups {
                     for item in grp.items {
                         if bookmarkedTitles.contains(item.title) && !favItems.contains(where: { $0.title == item.title }) {
                             favItems.append(item)
@@ -2070,10 +2207,10 @@ struct HUDView: View {
                     }
                 }
                 if !favItems.isEmpty {
-                    return [ShortcutGroup(title: "⭐ Favorites", items: favItems)] + groups
+                    return [ShortcutGroup(title: "⭐ Favorites", items: favItems)] + allGroups
                 }
             }
-            return groups
+            return allGroups
         case .global:
             var all = groups
             for grp in AeroSpaceConfigParser.parse() {
@@ -2414,6 +2551,19 @@ struct HUDView: View {
                 .cornerRadius(8)
                 .frame(width: 440)
 
+                // Show / Hide Known Shortcuts Button
+                Button(action: {
+                    searchState.showHiddenItems.toggle()
+                    HUDWindowController.shared.applyScreenPercentageFrame(groups: currentScopeGroups)
+                }) {
+                    Image(systemName: searchState.showHiddenItems ? "eye.fill" : "eye.slash")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(searchState.showHiddenItems ? accent : .gray)
+                        .padding(4)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help(searchState.showHiddenItems ? "Hide known shortcuts (currently showing all)" : "Reveal hidden/known shortcuts for this app")
+
                 // Pin Button
                 Button(action: {
                     settings.isPinned.toggle()
@@ -2560,10 +2710,19 @@ struct HUDView: View {
                             HStack(alignment: .top, spacing: 16) {
                                 ForEach(Array(filteredGroups.enumerated()), id: \.element.id) { groupIndex, group in
                                     VStack(alignment: .leading, spacing: 8) {
-                                        Text(group.title.uppercased())
-                                            .font(.system(size: 11, weight: .bold))
-                                            .foregroundColor(group.title.contains("Favorites") ? Color.yellow : accent)
-                                            .padding(.bottom, 2)
+                                        let isCatHidden = hiddenManager.isCategoryHidden(bundleID: currentScopeBundleID, category: group.title)
+                                        HStack(spacing: 5) {
+                                            Text(group.title.uppercased())
+                                                .font(.system(size: 11, weight: .bold))
+                                                .foregroundColor(group.title.contains("Favorites") ? Color.yellow : accent)
+
+                                            if isCatHidden {
+                                                Image(systemName: "eye.slash.fill")
+                                                    .font(.system(size: 9))
+                                                    .foregroundColor(.orange)
+                                            }
+                                        }
+                                        .padding(.bottom, 2)
 
                                         ScrollViewReader { vertProxy in
                                             ScrollView(.vertical, showsIndicators: true) {
@@ -2572,12 +2731,14 @@ struct HUDView: View {
                                                         let isSelected = (currentGroupIndex == groupIndex && currentItemIndex == itemIndex)
                                                         let isHovered = (searchState.hoveredItemId == item.id)
                                                         let isBookmarked = favorites.isBookmarked(scopeKey: currentScopeStorageKey, title: item.title)
+                                                        let isItemHidden = hiddenManager.isItemHidden(bundleID: currentScopeBundleID, category: group.title, title: item.title)
 
                                                         ShortcutRow(
                                                             item: item,
                                                             isSelected: isSelected,
                                                             isHovered: isHovered,
                                                             isBookmarked: isBookmarked,
+                                                            isHiddenShortcut: isItemHidden,
                                                             isOddRow: (itemIndex % 2 != 0),
                                                             accentColor: accent,
                                                             onSelect: {
@@ -3037,6 +3198,7 @@ struct RecordingBadgeView: View {
 struct KeybindingEditorView: View {
     @ObservedObject var state: EditorState
     @ObservedObject var settings = AppSettings.shared
+    @ObservedObject var hiddenManager = HiddenItemsManager.shared
     var onClose: () -> Void
 
     var body: some View {
@@ -3271,7 +3433,30 @@ struct KeybindingEditorView: View {
                                         .help("Toggle whether this category appears on Ghostty's main combined cheatsheet")
                                     }
 
+                                    if hiddenManager.isCategoryHidden(bundleID: state.selectedBundleID, category: category) {
+                                        Text("HIDDEN IN HUD")
+                                            .font(.system(size: 9, weight: .bold))
+                                            .foregroundColor(.orange)
+                                            .padding(.horizontal, 5)
+                                            .padding(.vertical, 2)
+                                            .background(Color.orange.opacity(0.15))
+                                            .cornerRadius(4)
+                                    }
+
                                     Spacer()
+
+                                    // Hide / Unhide Category from HUD Button
+                                    let isCatHidden = hiddenManager.isCategoryHidden(bundleID: state.selectedBundleID, category: category)
+                                    Button(action: {
+                                        hiddenManager.toggleCategoryHidden(bundleID: state.selectedBundleID, category: category)
+                                    }) {
+                                        Image(systemName: isCatHidden ? "eye.slash.fill" : "eye")
+                                            .font(.system(size: 11))
+                                            .foregroundColor(isCatHidden ? Color.orange : Color.secondary)
+                                            .padding(4)
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                    .help(isCatHidden ? "Unhide this category in HUD" : "Hide this entire category/column from HUD")
 
                                     Button(action: {
                                         state.deleteCategory(name: category)
@@ -3279,6 +3464,7 @@ struct KeybindingEditorView: View {
                                         Image(systemName: "trash")
                                             .font(.system(size: 11))
                                             .foregroundColor(.secondary)
+                                            .padding(4)
                                     }
                                     .buttonStyle(PlainButtonStyle())
                                     .help("Delete Category")
@@ -3415,6 +3601,19 @@ struct KeybindingEditorView: View {
                                                 }
                                             }
                                         }
+
+                                        // Hide / Unhide Shortcut Button
+                                        let isItemHidden = hiddenManager.isItemHidden(bundleID: state.selectedBundleID, category: category, title: currentTitle)
+                                        Button(action: {
+                                            hiddenManager.toggleItemHidden(bundleID: state.selectedBundleID, category: category, title: currentTitle)
+                                        }) {
+                                            Image(systemName: isItemHidden ? "eye.slash.fill" : "eye")
+                                                .font(.system(size: 11))
+                                                .foregroundColor(isItemHidden ? Color.orange : Color.secondary.opacity(0.7))
+                                                .padding(4)
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
+                                        .help(isItemHidden ? "Unhide this shortcut in HUD" : "Hide this shortcut from HUD (hide known shortcut)")
 
                                         // Delete Shortcut Button
                                         Button(action: {
