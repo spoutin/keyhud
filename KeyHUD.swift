@@ -310,6 +310,56 @@ class LaunchAtLoginManager: ObservableObject {
     }
 }
 
+// MARK: - Bookmarks & Favorites Manager
+
+class FavoritesManager: ObservableObject {
+    static let shared = FavoritesManager()
+    private let storageKey = "bookmarkedShortcuts"
+
+    @Published var bookmarks: [String: Set<String>] = [:]
+
+    init() {
+        load()
+    }
+
+    func load() {
+        if let dict = UserDefaults.standard.dictionary(forKey: storageKey) as? [String: [String]] {
+            var loaded: [String: Set<String>] = [:]
+            for (k, v) in dict {
+                loaded[k] = Set(v)
+            }
+            self.bookmarks = loaded
+        }
+    }
+
+    private func save() {
+        var dict: [String: [String]] = [:]
+        for (k, v) in bookmarks {
+            dict[k] = Array(v).sorted()
+        }
+        UserDefaults.standard.set(dict, forKey: storageKey)
+    }
+
+    func isBookmarked(scopeKey: String, title: String) -> Bool {
+        return bookmarks[scopeKey]?.contains(title) ?? false
+    }
+
+    func toggleBookmark(scopeKey: String, title: String) {
+        var set = bookmarks[scopeKey] ?? Set<String>()
+        if set.contains(title) {
+            set.remove(title)
+        } else {
+            set.insert(title)
+        }
+        bookmarks[scopeKey] = set
+        save()
+    }
+
+    func bookmarks(for scopeKey: String) -> Set<String> {
+        return bookmarks[scopeKey] ?? []
+    }
+}
+
 // MARK: - Custom Shortcuts Manager & Importer
 
 class CustomShortcutsManager {
