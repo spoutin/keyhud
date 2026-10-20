@@ -135,10 +135,11 @@
   - [x] Toggle in HUD header or Settings to show/hide known shortcuts (`⌘C`, `⌘V`, `⌘Z`, `⌘Q`, etc.) to dramatically cut visual clutter.
   - [x] Manage hidden shortcuts list in Settings under Shortcuts & Editor.
 
-- [ ] **Universal Command Palette Mode (Paletro-style)**
-  - [ ] Option to index all menu bar items (including those without keyboard shortcuts) in `MenuScanner`.
-  - [ ] Search query matches full application actions (e.g. "Export As...", "Format > Paragraph").
-  - [ ] Press `Enter` or click to execute actions directly via Accessibility API (`AXUIElementPerformAction`).
+- [x] **Universal Command Palette Mode (Paletro-style)**
+  - [x] Option to index all menu bar items (including those without keyboard shortcuts) in `MenuScanner`.
+  - [x] Search query matches full application actions (e.g. "Export As...", "Format > Paragraph").
+  - [x] Press `Enter` or click to execute actions directly via Accessibility API (`AXUIElementPerformAction`).
+  - [x] Configurable in Settings (During Search Only, Always, Shortcuts Only) and quick-toggle button in HUD header.
 
 - [ ] **App Ignore / Blacklist**
   - [ ] Add an "Ignored Applications" list in Settings under General (e.g. for full-screen games, VMs, remote desktop/VNC).

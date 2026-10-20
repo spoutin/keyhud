@@ -12,6 +12,8 @@ struct ShortcutItem: Identifiable, Equatable {
     let keys: String
     var axElement: AXUIElement? = nil
 
+    var isMenuAction: Bool { keys.trimmingCharacters(in: .whitespaces).isEmpty }
+
     static func == (lhs: ShortcutItem, rhs: ShortcutItem) -> Bool {
         lhs.id == rhs.id && lhs.title == rhs.title && lhs.keys == rhs.keys
     }
@@ -123,6 +125,25 @@ enum SearchScope: String, CaseIterable, Identifiable {
     }
 }
 
+enum CommandPaletteMode: String, CaseIterable, Identifiable {
+    case searchOnly = "During Search Only"
+    case always = "Always"
+    case off = "Shortcuts Only"
+
+    var id: String { rawValue }
+
+    var description: String {
+        switch self {
+        case .searchOnly:
+            return "Shows menu actions without shortcuts only while typing in the search bar."
+        case .always:
+            return "Shows all application menu actions in columns at all times."
+        case .off:
+            return "Only shows menu items that have an assigned keyboard shortcut."
+        }
+    }
+}
+
 // MARK: - App Settings & Preferences
 
 class AppSettings: ObservableObject {
@@ -137,6 +158,11 @@ class AppSettings: ObservableObject {
     @Published var defaultSearchScope: String {
         didSet {
             UserDefaults.standard.set(defaultSearchScope, forKey: "defaultSearchScope")
+        }
+    }
+    @Published var commandPaletteMode: String {
+        didSet {
+            UserDefaults.standard.set(commandPaletteMode, forKey: "commandPaletteMode")
         }
     }
     @Published var widthPercent: Double {
@@ -221,6 +247,9 @@ class AppSettings: ObservableObject {
 
         let savedSearchScope = UserDefaults.standard.string(forKey: "defaultSearchScope")
         self.defaultSearchScope = (savedSearchScope != nil && SearchScope(rawValue: savedSearchScope!) != nil) ? savedSearchScope! : SearchScope.current.rawValue
+
+        let savedPalette = UserDefaults.standard.string(forKey: "commandPaletteMode")
+        self.commandPaletteMode = (savedPalette != nil && CommandPaletteMode(rawValue: savedPalette!) != nil) ? savedPalette! : CommandPaletteMode.searchOnly.rawValue
 
         let savedW = UserDefaults.standard.double(forKey: "widthPercent")
         self.widthPercent = (savedW >= 20 && savedW <= 100) ? savedW : 75.0
@@ -1324,7 +1353,7 @@ class MenuScanner {
         }
     }
 
-    static func scanMenu(element: AXUIElement, groupTitle: String, items: inout [ShortcutItem]) {
+    static func scanMenu(element: AXUIElement, groupTitle: String, parentPath: String = "", items: inout [ShortcutItem]) {
         var childrenVal: AnyObject?
         guard AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &childrenVal) == .success,
               let children = childrenVal as? [AXUIElement] else { return }
@@ -1339,15 +1368,30 @@ class MenuScanner {
             var cmdModVal: AnyObject?
             AXUIElementCopyAttributeValue(item, kAXMenuItemCmdModifiersAttribute as CFString, &cmdModVal)
 
-            if let title = titleVal as? String, !title.isEmpty,
-               let cmd = cmdCharVal as? String, !cmd.isEmpty {
-                let modInt = (cmdModVal as? Int) ?? 0
-                let modStr = decodeModifiers(modInt)
-                let keyStr = modStr + decodeGlyph(cmd)
-                items.append(ShortcutItem(title: title, keys: keyStr, axElement: item))
+            var isSubmenu = false
+            var subChildrenVal: AnyObject?
+            if AXUIElementCopyAttributeValue(item, kAXChildrenAttribute as CFString, &subChildrenVal) == .success,
+               let subKids = subChildrenVal as? [AXUIElement], !subKids.isEmpty {
+                isSubmenu = true
             }
 
-            scanMenu(element: item, groupTitle: groupTitle, items: &items)
+            if let title = titleVal as? String, !title.isEmpty {
+                let fullTitle = parentPath.isEmpty ? title : "\(parentPath) > \(title)"
+
+                if let cmd = cmdCharVal as? String, !cmd.isEmpty {
+                    let modInt = (cmdModVal as? Int) ?? 0
+                    let modStr = decodeModifiers(modInt)
+                    let keyStr = modStr + decodeGlyph(cmd)
+                    items.append(ShortcutItem(title: fullTitle, keys: keyStr, axElement: item))
+                } else if !isSubmenu {
+                    // Clickable action without a keyboard shortcut
+                    items.append(ShortcutItem(title: fullTitle, keys: "", axElement: item))
+                }
+            }
+
+            let nextParent = (titleVal as? String) ?? ""
+            let nextPath = parentPath.isEmpty ? nextParent : "\(parentPath) > \(nextParent)"
+            scanMenu(element: item, groupTitle: groupTitle, parentPath: nextPath, items: &items)
         }
     }
 
@@ -1379,7 +1423,7 @@ class MenuScanner {
             guard let title = titleVal as? String, !title.isEmpty, title != "Apple" else { continue }
 
             var items: [ShortcutItem] = []
-            scanMenu(element: child, groupTitle: title, items: &items)
+            scanMenu(element: child, groupTitle: title, parentPath: "", items: &items)
             if !items.isEmpty {
                 groups.append(ShortcutGroup(title: title, items: items))
             }
@@ -1691,6 +1735,12 @@ class SearchState: ObservableObject {
             selectedItemIndex = 0
         }
     }
+    @Published var isCommandPaletteActive: Bool = false {
+        didSet {
+            selectedGroupIndex = 0
+            selectedItemIndex = 0
+        }
+    }
 
     var canGoBack: Bool { !scopeHistory.isEmpty }
 
@@ -1934,22 +1984,38 @@ struct ShortcutRow: View {
 
                     Spacer(minLength: 8)
 
-                    // Distinct Key Token Badges
-                    HStack(spacing: 3) {
-                        ForEach(Array(tokens.enumerated()), id: \.offset) { _, token in
-                            Text(token.text)
-                                .font(.system(size: token.isSpecial ? 11 : 10, weight: .bold, design: .monospaced))
-                                .padding(.horizontal, token.isSpecial ? 5 : 4)
-                                .padding(.vertical, 2)
-                                .foregroundColor(isSelected ? .black : token.color)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 4)
-                                        .fill(isSelected ? token.color : (token.isSpecial ? token.color.opacity(0.18) : Color.white.opacity(0.12)))
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 4)
-                                        .stroke(isSelected ? Color.clear : (token.isSpecial ? token.color.opacity(0.40) : Color.white.opacity(0.20)), lineWidth: 0.75)
-                                )
+                    // Distinct Key Token Badges or Action Pill
+                    if tokens.isEmpty {
+                        Text("Action")
+                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .foregroundColor(isSelected ? .black : Color.white.opacity(0.60))
+                            .background(
+                                RoundedRectangle(cornerRadius: 4)
+                                    .fill(isSelected ? accentColor : Color.white.opacity(0.08))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 4)
+                                    .stroke(isSelected ? Color.clear : Color.white.opacity(0.15), lineWidth: 0.75)
+                            )
+                    } else {
+                        HStack(spacing: 3) {
+                            ForEach(Array(tokens.enumerated()), id: \.offset) { _, token in
+                                Text(token.text)
+                                    .font(.system(size: token.isSpecial ? 11 : 10, weight: .bold, design: .monospaced))
+                                    .padding(.horizontal, token.isSpecial ? 5 : 4)
+                                    .padding(.vertical, 2)
+                                    .foregroundColor(isSelected ? .black : token.color)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 4)
+                                            .fill(isSelected ? token.color : (token.isSpecial ? token.color.opacity(0.18) : Color.white.opacity(0.12)))
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 4)
+                                            .stroke(isSelected ? Color.clear : (token.isSpecial ? token.color.opacity(0.40) : Color.white.opacity(0.20)), lineWidth: 0.75)
+                                    )
+                            }
                         }
                     }
                 }
@@ -2139,18 +2205,32 @@ struct HUDView: View {
         }
     }
 
+    var shouldIncludeMenuActions: Bool {
+        if searchState.isCommandPaletteActive { return true }
+        if settings.commandPaletteMode == CommandPaletteMode.always.rawValue { return true }
+        if settings.commandPaletteMode == CommandPaletteMode.searchOnly.rawValue && !searchState.query.trimmingCharacters(in: .whitespaces).isEmpty {
+            return true
+        }
+        return false
+    }
+
     var currentScopeGroups: [ShortcutGroup] {
         let bID = currentScopeBundleID
         var baseGroups = rawScopeGroups
+        let includeActions = shouldIncludeMenuActions
 
-        if !searchState.showHiddenItems {
-            baseGroups = baseGroups.compactMap { grp in
-                if hiddenManager.isCategoryHidden(bundleID: bID, category: grp.title) {
-                    return nil
-                }
-                let visible = grp.items.filter { !hiddenManager.isItemHidden(bundleID: bID, category: grp.title, title: $0.title) }
-                return visible.isEmpty ? nil : ShortcutGroup(title: grp.title, items: visible)
+        baseGroups = baseGroups.compactMap { grp in
+            if !searchState.showHiddenItems && hiddenManager.isCategoryHidden(bundleID: bID, category: grp.title) {
+                return nil
             }
+            let visible = grp.items.filter { item in
+                if !includeActions && item.isMenuAction { return false }
+                if !searchState.showHiddenItems && hiddenManager.isItemHidden(bundleID: bID, category: grp.title, title: item.title) {
+                    return false
+                }
+                return true
+            }
+            return visible.isEmpty ? nil : ShortcutGroup(title: grp.title, items: visible)
         }
 
         let key = currentScopeStorageKey
@@ -2185,16 +2265,23 @@ struct HUDView: View {
             return currentScopeGroups
         case .currentAndSubApps:
             var allGroups = groups
-            if !searchState.showHiddenItems {
-                let bID = currentScopeBundleID
-                allGroups = allGroups.compactMap { grp in
-                    if hiddenManager.isCategoryHidden(bundleID: bID, category: grp.title) {
-                        return nil
-                    }
-                    let visible = grp.items.filter { !hiddenManager.isItemHidden(bundleID: bID, category: grp.title, title: $0.title) }
-                    return visible.isEmpty ? nil : ShortcutGroup(title: grp.title, items: visible)
+            let bID = currentScopeBundleID
+            let includeActions = shouldIncludeMenuActions
+
+            allGroups = allGroups.compactMap { grp in
+                if !searchState.showHiddenItems && hiddenManager.isCategoryHidden(bundleID: bID, category: grp.title) {
+                    return nil
                 }
+                let visible = grp.items.filter { item in
+                    if !includeActions && item.isMenuAction { return false }
+                    if !searchState.showHiddenItems && hiddenManager.isItemHidden(bundleID: bID, category: grp.title, title: item.title) {
+                        return false
+                    }
+                    return true
+                }
+                return visible.isEmpty ? nil : ShortcutGroup(title: grp.title, items: visible)
             }
+
             let key = currentScopeStorageKey
             let bookmarkedTitles = favorites.bookmarks(for: key)
             if !bookmarkedTitles.isEmpty {
@@ -2563,6 +2650,19 @@ struct HUDView: View {
                 }
                 .buttonStyle(PlainButtonStyle())
                 .help(searchState.showHiddenItems ? "Hide known shortcuts (currently showing all)" : "Reveal hidden/known shortcuts for this app")
+
+                // Command Palette Toggle Button
+                Button(action: {
+                    searchState.isCommandPaletteActive.toggle()
+                    HUDWindowController.shared.applyScreenPercentageFrame(groups: currentScopeGroups)
+                }) {
+                    Image(systemName: searchState.isCommandPaletteActive ? "command.circle.fill" : "command.circle")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(searchState.isCommandPaletteActive ? accent : .gray)
+                        .padding(4)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help(searchState.isCommandPaletteActive ? "Command Palette Active (showing all menu actions)" : "Toggle Command Palette mode (show all menu actions)")
 
                 // Pin Button
                 Button(action: {
@@ -4124,6 +4224,47 @@ struct SettingsView: View {
                 .padding(14)
                 .background(Color(NSColor.controlBackgroundColor))
                 .cornerRadius(8)
+
+                // Command Palette Mode Preferences Section
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("COMMAND PALETTE MODE")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.secondary)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(CommandPaletteMode.allCases) { mode in
+                            Button(action: {
+                                settings.commandPaletteMode = mode.rawValue
+                            }) {
+                                HStack(alignment: .top, spacing: 8) {
+                                    Image(systemName: settings.commandPaletteMode == mode.rawValue ? "largecircle.fill.circle" : "circle")
+                                        .foregroundColor(settings.commandPaletteMode == mode.rawValue ? settings.currentAccentColor : .secondary)
+                                        .font(.system(size: 13))
+                                        .padding(.top, 1)
+
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(mode.rawValue)
+                                            .font(.system(size: 13, weight: settings.commandPaletteMode == mode.rawValue ? .semibold : .regular))
+                                            .foregroundColor(.primary)
+                                        Text(mode.description)
+                                            .font(.system(size: 11))
+                                            .foregroundColor(.secondary)
+                                    }
+                                    Spacer()
+                                }
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    }
+
+                    Text("Indexes all clickable menu bar items, allowing execution even for actions without shortcuts (Paletro-style).")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                        .padding(.top, 2)
+                }
+                .padding(14)
+                .background(Color(NSColor.controlBackgroundColor))
+                .cornerRadius(8)
             }
             .padding(18)
         }
@@ -4439,7 +4580,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         let targetSize: NSSize
         switch tab {
         case .general:
-            targetSize = NSSize(width: 640, height: 560)
+            targetSize = NSSize(width: 640, height: 620)
         case .appearance:
             targetSize = NSSize(width: 640, height: 600)
         case .shortcuts:
