@@ -2219,8 +2219,11 @@ struct HUDView: View {
             .padding(.vertical, 8)
             .background(Color.black.opacity(0.35))
         }
-        .frame(minWidth: 500, minHeight: 350)
+        .frame(minWidth: 520, minHeight: 360)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onChange(of: searchState.selectedScope) {
+            HUDWindowController.shared.applyScreenPercentageFrame(groups: currentScopeGroups)
+        }
         .background(
             ZStack {
                 VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
@@ -2289,7 +2292,7 @@ class HUDWindowController: NSWindowController {
         panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
         panel.standardWindowButton(.zoomButton)?.isHidden = true
         panel.animationBehavior = .utilityWindow
-        panel.minSize = NSSize(width: 500, height: 350)
+        panel.minSize = NSSize(width: 520, height: 360)
 
         super.init(window: panel)
 
@@ -2318,22 +2321,49 @@ class HUDWindowController: NSWindowController {
         return NSScreen.main ?? NSScreen.screens.first ?? NSScreen()
     }
 
-    func applyScreenPercentageFrame() {
+    func applyScreenPercentageFrame(groups: [ShortcutGroup]? = nil) {
         guard let window = window else { return }
         let screen = targetScreen()
         let visible = screen.visibleFrame
         let settings = AppSettings.shared
 
-        let wPercent = max(25.0, min(100.0, settings.widthPercent))
-        let hPercent = max(25.0, min(100.0, settings.heightPercent))
+        let minW: CGFloat = 520.0
+        let minH: CGFloat = 360.0
 
-        let targetWidth = max(500.0, visible.width * (wPercent / 100.0))
-        let targetHeight = max(350.0, visible.height * (hPercent / 100.0))
-        let originX = visible.origin.x + (visible.width - targetWidth) / 2.0
-        let originY = visible.origin.y + (visible.height - targetHeight) / 2.0
+        let maxWPercent = max(25.0, min(100.0, settings.widthPercent))
+        let maxHPercent = max(25.0, min(100.0, settings.heightPercent))
 
-        let targetFrame = NSRect(x: originX, y: originY, width: targetWidth, height: targetHeight)
-        window.setFrame(targetFrame, display: true, animate: false)
+        let maxAllowedWidth = max(minW, visible.width * (maxWPercent / 100.0))
+        let maxAllowedHeight = max(minH, visible.height * (maxHPercent / 100.0))
+
+        let activeGroups = groups ?? viewModel.groups
+        let fittedWidth: CGFloat
+        let fittedHeight: CGFloat
+
+        if activeGroups.isEmpty {
+            fittedWidth = minW
+            fittedHeight = minH
+        } else {
+            let colCount = CGFloat(max(1, min(activeGroups.count, 6)))
+            let colWidth: CGFloat = 260.0
+            let hPadding: CGFloat = 60.0
+            let contentWidth = colCount * colWidth + hPadding
+
+            let maxItems = activeGroups.map { $0.items.count }.max() ?? 0
+            let rowH: CGFloat = 34.0
+            let headerH: CGFloat = 30.0
+            let chromeH: CGFloat = 120.0 // Header + bottom legend bar + padding
+            let contentHeight = headerH + (CGFloat(maxItems) * rowH) + chromeH
+
+            fittedWidth = max(minW, min(maxAllowedWidth, contentWidth))
+            fittedHeight = max(minH, min(maxAllowedHeight, contentHeight))
+        }
+
+        let originX = visible.origin.x + (visible.width - fittedWidth) / 2.0
+        let originY = visible.origin.y + (visible.height - fittedHeight) / 2.0
+
+        let targetFrame = NSRect(x: originX, y: originY, width: fittedWidth, height: fittedHeight)
+        window.setFrame(targetFrame, display: true, animate: window.isVisible)
     }
 
     private func resolveTargetApp(_ passedApp: NSRunningApplication? = nil) -> NSRunningApplication? {
@@ -2410,7 +2440,7 @@ class HUDWindowController: NSWindowController {
         viewModel.appIcon = icon
         viewModel.groups = groups
 
-        applyScreenPercentageFrame()
+        applyScreenPercentageFrame(groups: groups)
         AppSettings.shared.updateWindowsAppearance()
 
         window.orderFrontRegardless()
@@ -3404,13 +3434,13 @@ struct SettingsView: View {
 
                 // Window Sizing Section (Moved to Appearance)
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("WINDOW SIZE")
+                    Text("MAXIMUM WINDOW SIZE CEILING")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundColor(.secondary)
 
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
-                            Text("Horizontal (% of screen)")
+                            Text("Max Horizontal Width (% of screen)")
                                 .font(.system(size: 13))
                                 .foregroundColor(.primary)
                             Spacer()
@@ -3423,7 +3453,7 @@ struct SettingsView: View {
 
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
-                            Text("Vertical (% of screen)")
+                            Text("Max Vertical Height (% of screen)")
                                 .font(.system(size: 13))
                                 .foregroundColor(.primary)
                             Spacer()
@@ -3433,6 +3463,11 @@ struct SettingsView: View {
                         }
                         Slider(value: $settings.heightPercent, in: 25...100, step: 1)
                     }
+
+                    Text("The HUD automatically shrinks to fit smaller shortcut lists, using these percentages as the maximum ceiling.")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                        .padding(.top, 2)
                 }
                 .padding(14)
                 .background(Color(NSColor.controlBackgroundColor))

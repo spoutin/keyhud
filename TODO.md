@@ -81,6 +81,12 @@
   - [x] Removed blocking `/opt/homebrew/bin/aerospace` subprocess execution from main-thread open path.
   - [x] Zero-latency Carbon `RegisterEventHotKey` for instantaneous `⌘⇧/` triggering at WindowServer level.
 
+- [x] **Dynamic Shrink-to-Fit Window Sizing with Configurable Ceiling**
+  - [x] Settings width and height percentages act as maximum allowed ceiling.
+  - [x] HUD window automatically shrinks down to tightly fit smaller cheatsheets and sub-tools without empty dead space.
+  - [x] Strict minimum size floor (520 × 360 pt) ensures search bar and legend chrome always fit comfortably.
+  - [x] Dynamic animated resize when switching scopes or sub-tools.
+
 ---
 
 ## 🚀 Medium Priority
