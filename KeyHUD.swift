@@ -831,16 +831,35 @@ struct MacOSGlobalShortcuts {
 class EditorState: ObservableObject {
     static let shared = EditorState()
     @Published var config: [String: [String: [[String: String]]]] = [:]
+    private var savedConfig: [String: [String: [[String: String]]]] = [:]
+    private var undoStack: [[String: [String: [[String: String]]]]] = []
+
     @Published var selectedBundleID: String = "" {
         didSet {
             autoDetectIfEmpty(for: selectedBundleID)
         }
     }
-    @Published var isDirty: Bool = false
     @Published var newCategoryName: String = ""
     @Published var isAddingCategory: Bool = false
     @Published var isAddingApp: Bool = false
     @Published var newAppBundleID: String = ""
+
+    var isDirty: Bool {
+        config != savedConfig
+    }
+
+    var canUndo: Bool {
+        !undoStack.isEmpty
+    }
+
+    func recordUndo() {
+        undoStack.append(config)
+    }
+
+    func undo() {
+        guard let prev = undoStack.popLast() else { return }
+        config = prev
+    }
 
     init() {
         reload()
@@ -849,7 +868,6 @@ class EditorState: ObservableObject {
     func reload(selecting targetBundleID: String? = nil) {
         let loaded = CustomShortcutsManager.shared.loadConfig()
         self.config = loaded
-        self.isDirty = false
         if let target = targetBundleID, !target.isEmpty {
             if self.config[target] == nil {
                 self.config[target] = [:]
@@ -861,6 +879,8 @@ class EditorState: ObservableObject {
             self.selectedBundleID = loaded.keys.sorted().first ?? "com.mitchellh.ghostty"
         }
         autoDetectIfEmpty(for: self.selectedBundleID)
+        self.savedConfig = self.config
+        self.undoStack.removeAll()
     }
 
     func autoDetectIfEmpty(for bundleID: String) {
@@ -935,16 +955,17 @@ class EditorState: ObservableObject {
     func addApp(bundleID: String) {
         let trimmed = bundleID.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
+        recordUndo()
         if config[trimmed] == nil {
             config[trimmed] = [:]
         }
         selectedBundleID = trimmed
-        isDirty = true
     }
 
     func addCategory(name: String) {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty, !selectedBundleID.isEmpty else { return }
+        recordUndo()
         if config[selectedBundleID] == nil {
             config[selectedBundleID] = [:]
         }
@@ -952,18 +973,18 @@ class EditorState: ObservableObject {
             config[selectedBundleID]?[trimmed] = [
                 ["title": "New Shortcut", "keys": ""]
             ]
-            isDirty = true
         }
     }
 
     func deleteCategory(name: String) {
         guard !selectedBundleID.isEmpty else { return }
+        recordUndo()
         config[selectedBundleID]?.removeValue(forKey: name)
-        isDirty = true
     }
 
     func addShortcut(category: String) {
         guard !selectedBundleID.isEmpty else { return }
+        recordUndo()
         if config[selectedBundleID] == nil {
             config[selectedBundleID] = [:]
         }
@@ -971,31 +992,32 @@ class EditorState: ObservableObject {
             config[selectedBundleID]?[category] = []
         }
         config[selectedBundleID]?[category]?.append(["title": "New Shortcut", "keys": ""])
-        isDirty = true
     }
 
     func updateShortcut(category: String, index: Int, title: String, keys: String) {
         guard !selectedBundleID.isEmpty,
               var items = config[selectedBundleID]?[category],
               index < items.count else { return }
+        if items[index]["title"] == title && items[index]["keys"] == keys { return }
+        recordUndo()
         items[index] = ["title": title, "keys": keys]
         config[selectedBundleID]?[category] = items
-        isDirty = true
     }
 
     func deleteShortcut(category: String, index: Int) {
         guard !selectedBundleID.isEmpty,
               var items = config[selectedBundleID]?[category],
               index < items.count else { return }
+        recordUndo()
         items.remove(at: index)
         config[selectedBundleID]?[category] = items
-        isDirty = true
     }
 
     func insertModifier(_ mod: String, category: String, index: Int) {
         guard !selectedBundleID.isEmpty,
               var items = config[selectedBundleID]?[category],
               index < items.count else { return }
+        recordUndo()
         var keys = items[index]["keys"] ?? ""
         let modifiers: Set<Character> = ["⌃", "⌥", "⇧", "⌘"]
         let endsWithModifier = keys.last.map { modifiers.contains($0) } ?? false
@@ -1009,13 +1031,13 @@ class EditorState: ObservableObject {
         }
         items[index]["keys"] = keys
         config[selectedBundleID]?[category] = items
-        isDirty = true
     }
 
     func save() {
         do {
             try CustomShortcutsManager.shared.saveConfig(config)
-            isDirty = false
+            savedConfig = config
+            undoStack.removeAll()
         } catch {
             print("Error saving shortcuts config: \(error)")
         }
@@ -2771,8 +2793,8 @@ struct KeybindingEditorView: View {
                     .frame(minWidth: 200)
 
                     Button(action: {
+                        state.recordUndo()
                         state.autoDetectFromRunningApp(bundleID: state.selectedBundleID)
-                        state.isDirty = true
                     }) {
                         Image(systemName: "arrow.clockwise")
                             .font(.system(size: 13))
@@ -2816,6 +2838,18 @@ struct KeybindingEditorView: View {
                         }
                     }
                     .help("Export currently configured shortcuts to Markdown")
+
+                    Button(action: {
+                        state.undo()
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.uturn.backward")
+                            Text("Undo")
+                        }
+                    }
+                    .disabled(!state.canUndo)
+                    .keyboardShortcut("z", modifiers: .command)
+                    .help("Undo last edit (⌘Z)")
 
                     Button("Revert") {
                         state.revert()
@@ -2900,12 +2934,6 @@ struct KeybindingEditorView: View {
                         }
 
                         Spacer()
-
-                        if state.isDirty {
-                            Text("Unsaved Changes")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundColor(Color.orange)
-                        }
                     }
                     .padding(.top, 4)
 
@@ -3761,6 +3789,24 @@ struct SettingsView: View {
                 }
 
                 Spacer()
+
+                if editorState.isDirty {
+                    HStack(spacing: 5) {
+                        Image(systemName: "exclamationmark.circle.fill")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text("Unsaved Changes")
+                            .font(.system(size: 11, weight: .bold))
+                    }
+                    .foregroundColor(Color.orange)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 4)
+                    .background(Color.orange.opacity(0.14))
+                    .cornerRadius(5)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 5)
+                            .stroke(Color.orange.opacity(0.35), lineWidth: 1)
+                    )
+                }
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 8)
@@ -3832,9 +3878,7 @@ class SettingsWindowController: NSWindowController {
 
     func openSettings(selectingTab: SettingsTab = .general, bundleID: String? = nil) {
         AppSettings.shared.selectedSettingsTab = selectingTab.rawValue
-        if let bid = bundleID {
-            EditorState.shared.reload(selecting: bid)
-        }
+        EditorState.shared.reload(selecting: bundleID)
         AppSettings.shared.updateWindowsAppearance()
         updateSizeForTab(selectingTab)
         window?.center()
