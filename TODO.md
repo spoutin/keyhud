@@ -51,6 +51,12 @@
   - [x] Add the modifier legend bar to the Keybinding Editor tab in Settings for consistent quick reference.
 
 
+- [ ] **Shell & TUI Application Cheatsheets with Ghostty Sub-Menu & Main Visibility Controls**
+  - [ ] Support distinct CLI/TUI application profiles (e.g. `Neovim`, `Ghostty/Herdr`, `Zsh`, `lazygit`, `yazi`, `tmux/zellij`, `k9s`).
+  - [ ] Add a sub-menu / scope filter under Ghostty in the HUD header dropdown (e.g. `Ghostty ➔ Main (Combined)`, `Neovim`, `Zsh`, `lazygit`, etc.) so individual TUI cheatsheets can be viewed in isolation.
+  - [ ] Add configuration controls in Settings (under Shortcuts & Editor) to choose which TUI tools appear pinned on the "Main" Ghostty page versus remaining exclusively in the sub-menu.
+  - [ ] Allow adding custom CLI/TUI tool categories and keybindings in the Keybinding Editor under terminal tools.
+
 ---
 
 ## 🚀 Medium Priority
