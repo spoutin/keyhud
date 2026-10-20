@@ -1190,11 +1190,38 @@ class SearchState: ObservableObject {
             selectedItemIndex = 0
         }
     }
+    @Published var scopeHistory: [HUDScope] = []
     @Published var activeSearchScope: SearchScope = .current {
         didSet {
             selectedGroupIndex = 0
             selectedItemIndex = 0
         }
+    }
+
+    var canGoBack: Bool { !scopeHistory.isEmpty }
+
+    func navigateToScope(_ newScope: HUDScope) {
+        if selectedScope != newScope {
+            scopeHistory.append(selectedScope)
+            selectedScope = newScope
+        }
+    }
+
+    func popScope() -> Bool {
+        guard let prev = scopeHistory.popLast() else { return false }
+        selectedScope = prev
+        return true
+    }
+
+    func popToHistoryIndex(_ index: Int) {
+        guard index >= 0 && index < scopeHistory.count else { return }
+        let target = scopeHistory[index]
+        scopeHistory = Array(scopeHistory.prefix(index))
+        selectedScope = target
+    }
+
+    func clearHistory() {
+        scopeHistory.removeAll()
     }
 }
 
@@ -2254,6 +2281,8 @@ class HUDWindowController: NSWindowController {
 
         currentTargetApp = validApp
         searchState.query = ""
+        searchState.clearHistory()
+        searchState.selectedScope = .activeApp
         let defaultScope = SearchScope(rawValue: AppSettings.shared.defaultSearchScope) ?? .current
         searchState.activeSearchScope = defaultScope
 
@@ -2301,11 +2330,16 @@ class HUDWindowController: NSWindowController {
         }
 
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self = self else { return event }
             if event.keyCode == 53 { // Esc
-                if AppSettings.shared.isPinned {
+                if !self.searchState.query.isEmpty {
+                    self.searchState.query = ""
+                } else if self.searchState.canGoBack {
+                    _ = self.searchState.popScope()
+                } else if AppSettings.shared.isPinned {
                     AppSettings.shared.isPinned = false
                 } else {
-                    self?.hide()
+                    self.hide()
                 }
                 return nil
             }
