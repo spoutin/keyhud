@@ -1337,12 +1337,14 @@ struct ShortcutRow: View {
 
 enum HUDScope: Hashable, Identifiable {
     case activeApp
+    case ghosttyTool(category: String)
     case aerospace
     case macos
 
     var id: String {
         switch self {
         case .activeApp: return "activeApp"
+        case .ghosttyTool(let category): return "ghostty:\(category)"
         case .aerospace: return "aerospace"
         case .macos: return "macos"
         }
@@ -1351,6 +1353,7 @@ enum HUDScope: Hashable, Identifiable {
     var title: String {
         switch self {
         case .activeApp: return "Active App"
+        case .ghosttyTool(let category): return category
         case .aerospace: return "AeroSpace Tiling"
         case .macos: return "macOS System"
         }
@@ -1373,7 +1376,13 @@ struct HUDView: View {
     var currentScopeGroups: [ShortcutGroup] {
         switch searchState.selectedScope {
         case .activeApp:
+            if bundleID == "com.mitchellh.ghostty" {
+                // Filter to only categories marked "Shown on Main"
+                return groups.filter { settings.isGhosttyCategoryShownOnMain($0.title) }
+            }
             return groups
+        case .ghosttyTool(let catName):
+            return groups.filter { $0.title == catName }
         case .aerospace:
             return AeroSpaceConfigParser.parse()
         case .macos:
@@ -1476,7 +1485,23 @@ struct HUDView: View {
                             if let icon = appIcon {
                                 Image(nsImage: icon)
                             }
-                            Text(appName)
+                            Text(bundleID == "com.mitchellh.ghostty" ? "Ghostty (Main)" : appName)
+                        }
+                    }
+
+                    // Ghostty TUI Sub-profiles
+                    if bundleID == "com.mitchellh.ghostty" {
+                        Menu("Terminal Tools") {
+                            ForEach(groups) { grp in
+                                Button(action: {
+                                    searchState.selectedScope = .ghosttyTool(category: grp.title)
+                                }) {
+                                    HStack {
+                                        Image(systemName: "chevron.left.forwardslash.chevron.right")
+                                        Text(grp.title)
+                                    }
+                                }
+                            }
                         }
                     }
 
@@ -1506,7 +1531,14 @@ struct HUDView: View {
                                     .resizable()
                                     .frame(width: 20, height: 20)
                             }
-                            Text(appName)
+                            Text(bundleID == "com.mitchellh.ghostty" ? "Ghostty (Main)" : appName)
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundColor(.white)
+                        case .ghosttyTool(let catName):
+                            Image(systemName: "terminal")
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundColor(accent)
+                            Text("Ghostty: \(catName)")
                                 .font(.system(size: 15, weight: .bold))
                                 .foregroundColor(.white)
                         case .aerospace:
