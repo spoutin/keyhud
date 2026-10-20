@@ -1694,149 +1694,177 @@ struct HUDView: View {
 
         VStack(spacing: 0) {
             // Drag Header / Search Bar
-            HStack(spacing: 12) {
-                // Scope Switcher Dropdown Menu
-                Menu {
-                    // SECTION 1: Active App & Sub-tools
-                    Section("ACTIVE CONTEXT") {
-                        Button(action: {
-                            searchState.selectedScope = .activeApp
-                        }) {
-                            HStack {
-                                if let icon = appIcon {
-                                    Image(nsImage: icon)
+            HStack(spacing: 8) {
+                // Interactive Breadcrumb Trail
+                HStack(spacing: 6) {
+                    if !searchState.scopeHistory.isEmpty {
+                        ForEach(Array(searchState.scopeHistory.enumerated()), id: \.offset) { idx, prevScope in
+                            Button(action: {
+                                searchState.popToHistoryIndex(idx)
+                            }) {
+                                HStack(spacing: 4) {
+                                    Text(prevScope.title)
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundColor(Color.white.opacity(0.65))
                                 }
-                                Text("\(bundleID == "com.mitchellh.ghostty" ? "Ghostty (Main)" : appName) (Active)")
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 3)
+                                .background(Color.white.opacity(0.06))
+                                .cornerRadius(5)
                             }
-                        }
+                            .buttonStyle(PlainButtonStyle())
+                            .help("Back to \(prevScope.title)")
 
-                        // Ghostty TUI Sub-profiles
-                        if bundleID == "com.mitchellh.ghostty" {
-                            Menu("Terminal Tools") {
-                                ForEach(groups) { grp in
-                                    Button(action: {
-                                        searchState.selectedScope = .ghosttyTool(category: grp.title)
-                                    }) {
-                                        HStack {
-                                            Image(systemName: "chevron.left.forwardslash.chevron.right")
-                                            Text(grp.title)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundColor(Color.white.opacity(0.35))
+                        }
+                    }
+
+                    // Scope Switcher Dropdown Menu (Current Scope Level)
+                    Menu {
+                        // SECTION 1: Active App & Sub-tools
+                        Section("ACTIVE CONTEXT") {
+                            Button(action: {
+                                searchState.navigateToScope(.activeApp)
+                            }) {
+                                HStack {
+                                    if let icon = appIcon {
+                                        Image(nsImage: icon)
+                                    }
+                                    Text("\(bundleID == "com.mitchellh.ghostty" ? "Ghostty (Main)" : appName) (Active)")
+                                }
+                            }
+
+                            // Ghostty TUI Sub-profiles
+                            if bundleID == "com.mitchellh.ghostty" {
+                                Menu("Terminal Tools") {
+                                    ForEach(groups) { grp in
+                                        Button(action: {
+                                            searchState.navigateToScope(.ghosttyTool(category: grp.title))
+                                        }) {
+                                            HStack {
+                                                Image(systemName: "chevron.left.forwardslash.chevron.right")
+                                                Text(grp.title)
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
-                    }
 
-                    // SECTION 2: Global Shortcuts
-                    Section("GLOBAL TOOLS") {
-                        Button(action: {
-                            searchState.selectedScope = .aerospace
-                        }) {
-                            HStack {
-                                Image(systemName: "macwindow.on.rectangle")
-                                Text("AeroSpace Tiling")
+                        // SECTION 2: Global Shortcuts
+                        Section("GLOBAL TOOLS") {
+                            Button(action: {
+                                searchState.navigateToScope(.aerospace)
+                            }) {
+                                HStack {
+                                    Image(systemName: "macwindow.on.rectangle")
+                                    Text("AeroSpace Tiling")
+                                }
+                            }
+
+                            Button(action: {
+                                searchState.navigateToScope(.macos)
+                            }) {
+                                HStack {
+                                    Image(systemName: "apple.logo")
+                                    Text("macOS System")
+                                }
                             }
                         }
 
-                        Button(action: {
-                            searchState.selectedScope = .macos
-                        }) {
-                            HStack {
-                                Image(systemName: "apple.logo")
-                                Text("macOS System")
-                            }
-                        }
-                    }
+                        // SECTION 3: Other Running Applications
+                        let otherApps = NSWorkspace.shared.runningApplications.filter {
+                            $0.activationPolicy == .regular &&
+                            $0.bundleIdentifier != Bundle.main.bundleIdentifier &&
+                            $0.bundleIdentifier != bundleID &&
+                            $0.bundleIdentifier != "com.apple.loginwindow"
+                        }.sorted { ($0.localizedName ?? "") < ($1.localizedName ?? "") }
 
-                    // SECTION 3: Other Running Applications
-                    let otherApps = NSWorkspace.shared.runningApplications.filter {
-                        $0.activationPolicy == .regular &&
-                        $0.bundleIdentifier != Bundle.main.bundleIdentifier &&
-                        $0.bundleIdentifier != bundleID &&
-                        $0.bundleIdentifier != "com.apple.loginwindow"
-                    }.sorted { ($0.localizedName ?? "") < ($1.localizedName ?? "") }
+                        if !otherApps.isEmpty {
+                            Section("OTHER RUNNING APPS") {
+                                ForEach(otherApps, id: \.processIdentifier) { app in
+                                    let otherName = app.localizedName ?? "App"
+                                    let otherBID = app.bundleIdentifier ?? ""
+                                    let otherIcon = app.icon ?? NSImage()
 
-                    if !otherApps.isEmpty {
-                        Section("OTHER RUNNING APPS") {
-                            ForEach(otherApps, id: \.processIdentifier) { app in
-                                let otherName = app.localizedName ?? "App"
-                                let otherBID = app.bundleIdentifier ?? ""
-                                let otherIcon = app.icon ?? NSImage()
-
-                                Button(action: {
-                                    searchState.selectedScope = .runningApp(bundleID: otherBID, name: otherName, icon: otherIcon)
-                                }) {
-                                    HStack {
-                                        Image(nsImage: otherIcon)
-                                        Text(otherName)
+                                    Button(action: {
+                                        searchState.navigateToScope(.runningApp(bundleID: otherBID, name: otherName, icon: otherIcon))
+                                    }) {
+                                        HStack {
+                                            Image(nsImage: otherIcon)
+                                            Text(otherName)
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-                } label: {
-                    HStack(spacing: 8) {
-                        switch searchState.selectedScope {
-                        case .activeApp:
-                            if let icon = appIcon {
+                    } label: {
+                        HStack(spacing: 8) {
+                            switch searchState.selectedScope {
+                            case .activeApp:
+                                if let icon = appIcon {
+                                    Image(nsImage: icon)
+                                        .resizable()
+                                        .frame(width: 20, height: 20)
+                                }
+                                Text(bundleID == "com.mitchellh.ghostty" ? "Ghostty (Main)" : appName)
+                                    .font(.system(size: 15, weight: .bold))
+                                    .foregroundColor(.white)
+                            case .ghosttyTool(let catName):
+                                Image(systemName: "terminal")
+                                    .font(.system(size: 15, weight: .bold))
+                                    .foregroundColor(accent)
+                                Text("Ghostty: \(catName)")
+                                    .font(.system(size: 15, weight: .bold))
+                                    .foregroundColor(.white)
+                            case .runningApp(_, let name, let icon):
                                 Image(nsImage: icon)
                                     .resizable()
                                     .frame(width: 20, height: 20)
+                                Text(name)
+                                    .font(.system(size: 15, weight: .bold))
+                                    .foregroundColor(.white)
+                            case .aerospace:
+                                Image(systemName: "macwindow.on.rectangle")
+                                    .font(.system(size: 15, weight: .bold))
+                                    .foregroundColor(accent)
+                                Text("AeroSpace Tiling")
+                                    .font(.system(size: 15, weight: .bold))
+                                    .foregroundColor(.white)
+                            case .macos:
+                                Image(systemName: "apple.logo")
+                                    .font(.system(size: 15, weight: .bold))
+                                    .foregroundColor(accent)
+                                Text("macOS System")
+                                    .font(.system(size: 15, weight: .bold))
+                                    .foregroundColor(.white)
                             }
-                            Text(bundleID == "com.mitchellh.ghostty" ? "Ghostty (Main)" : appName)
-                                .font(.system(size: 15, weight: .bold))
-                                .foregroundColor(.white)
-                        case .ghosttyTool(let catName):
-                            Image(systemName: "terminal")
-                                .font(.system(size: 15, weight: .bold))
-                                .foregroundColor(accent)
-                            Text("Ghostty: \(catName)")
-                                .font(.system(size: 15, weight: .bold))
-                                .foregroundColor(.white)
-                        case .runningApp(_, let name, let icon):
-                            Image(nsImage: icon)
-                                .resizable()
-                                .frame(width: 20, height: 20)
-                            Text(name)
-                                .font(.system(size: 15, weight: .bold))
-                                .foregroundColor(.white)
-                        case .aerospace:
-                            Image(systemName: "macwindow.on.rectangle")
-                                .font(.system(size: 15, weight: .bold))
-                                .foregroundColor(accent)
-                            Text("AeroSpace Tiling")
-                                .font(.system(size: 15, weight: .bold))
-                                .foregroundColor(.white)
-                        case .macos:
-                            Image(systemName: "apple.logo")
-                                .font(.system(size: 15, weight: .bold))
-                                .foregroundColor(accent)
-                            Text("macOS System")
-                                .font(.system(size: 15, weight: .bold))
-                                .foregroundColor(.white)
-                        }
 
-                        // High-contrast native dropdown chevron pill
-                        ZStack {
-                            Circle()
-                                .fill(Color.white.opacity(0.18))
-                                .frame(width: 18, height: 18)
-                            Image(systemName: "chevron.up.chevron.down")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundColor(.white)
+                            // High-contrast native dropdown chevron pill
+                            ZStack {
+                                Circle()
+                                    .fill(Color.white.opacity(0.18))
+                                    .frame(width: 18, height: 18)
+                                Image(systemName: "chevron.up.chevron.down")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundColor(.white)
+                            }
                         }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color(red: 0.18, green: 0.18, blue: 0.22).opacity(0.95))
+                                .shadow(color: Color.black.opacity(0.3), radius: 3, x: 0, y: 1)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color.white.opacity(0.32), lineWidth: 1.2)
+                        )
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color(red: 0.18, green: 0.18, blue: 0.22).opacity(0.95))
-                            .shadow(color: Color.black.opacity(0.3), radius: 3, x: 0, y: 1)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.white.opacity(0.32), lineWidth: 1.2)
-                    )
+                    .menuStyle(BorderlessButtonMenuStyle())
                 }
                 .menuStyle(BorderlessButtonMenuStyle())
 
@@ -1926,17 +1954,17 @@ struct HUDView: View {
                 .buttonStyle(PlainButtonStyle())
                 .help("Edit shortcuts for \(appName)...")
 
-                // Close Button
-                Button(action: onDismiss) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 18))
-                        .foregroundColor(.gray)
+                    // Close Button
+                    Button(action: onDismiss) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 18))
+                            .foregroundColor(.gray)
+                    }
+                    .buttonStyle(PlainButtonStyle())
                 }
-                .buttonStyle(PlainButtonStyle())
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 14)
-            .padding(.bottom, 12)
+                .padding(.horizontal, 20)
+                .padding(.top, 14)
+                .padding(.bottom, 12)
 
             Divider()
                 .background(Color.white.opacity(0.15))

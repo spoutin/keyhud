@@ -69,6 +69,11 @@
   - [x] Selecting any running app immediately loads and renders its cheatsheet without activating the app or switching workspaces.
   - [x] Universal `FuzzyMatcher` engine powers the search bar and filter matching across both titles and keys.
 
+- [x] **Header Breadcrumb Trail & Hierarchical Esc-to-Go-Back Navigation**
+  - [x] Push/pop navigation history stack in `SearchState`.
+  - [x] Interactive header breadcrumb trail showing parent segments with jump-back links.
+  - [x] Hierarchical Esc behavior: clears query first, pops navigation history second, and closes the HUD at root.
+
 ---
 
 ## 🚀 Medium Priority
