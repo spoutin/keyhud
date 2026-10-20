@@ -165,6 +165,11 @@ class AppSettings: ObservableObject {
             UserDefaults.standard.set(accentTheme, forKey: "accentTheme")
         }
     }
+    @Published var zebraStriping: Bool {
+        didSet {
+            UserDefaults.standard.set(zebraStriping, forKey: "zebraStriping")
+        }
+    }
     @Published var isPinned: Bool {
         didSet {
             UserDefaults.standard.set(isPinned, forKey: "isPinned")
@@ -232,6 +237,7 @@ class AppSettings: ObservableObject {
         let savedTheme = UserDefaults.standard.string(forKey: "accentTheme")
         self.accentTheme = (savedTheme != nil && AccentTheme(rawValue: savedTheme!) != nil) ? savedTheme! : AccentTheme.cyan.rawValue
 
+        self.zebraStriping = UserDefaults.standard.bool(forKey: "zebraStriping")
         self.isPinned = UserDefaults.standard.bool(forKey: "isPinned")
         self.launchAtLogin = LaunchAtLoginManager.shared.isEnabled
 
@@ -1795,6 +1801,7 @@ struct ShortcutRow: View {
     let isSelected: Bool
     let isHovered: Bool
     let isBookmarked: Bool
+    var isOddRow: Bool = false
     let accentColor: Color
     let onSelect: () -> Void
     let onToggleBookmark: () -> Void
@@ -1802,6 +1809,12 @@ struct ShortcutRow: View {
 
     var body: some View {
         let tokens = KeyTokenParser.parse(item.keys)
+        let defaultBg: Color = {
+            if !AppSettings.shared.zebraStriping {
+                return Color.white.opacity(0.03)
+            }
+            return isOddRow ? Color.white.opacity(0.065) : Color.white.opacity(0.015)
+        }()
 
         HStack(spacing: 0) {
             Button(action: onSelect) {
@@ -1846,7 +1859,7 @@ struct ShortcutRow: View {
                 .padding(.vertical, 4)
                 .background(
                     RoundedRectangle(cornerRadius: 6)
-                        .fill(isSelected ? accentColor.opacity(0.25) : (isBookmarked ? Color.yellow.opacity(0.06) : (isHovered ? Color.white.opacity(0.08) : Color.white.opacity(0.03))))
+                        .fill(isSelected ? accentColor.opacity(0.25) : (isBookmarked ? Color.yellow.opacity(0.06) : (isHovered ? Color.white.opacity(0.08) : defaultBg)))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 6)
@@ -2565,6 +2578,7 @@ struct HUDView: View {
                                                             isSelected: isSelected,
                                                             isHovered: isHovered,
                                                             isBookmarked: isBookmarked,
+                                                            isOddRow: (itemIndex % 2 != 0),
                                                             accentColor: accent,
                                                             onSelect: {
                                                                 searchState.selectedGroupIndex = groupIndex
@@ -3998,6 +4012,27 @@ struct SettingsView: View {
                 .background(Color(NSColor.controlBackgroundColor))
                 .cornerRadius(8)
 
+                // Row Contrast & Scanning (Zebra Striping)
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("ROW CONTRAST & SCANNING")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.secondary)
+
+                    Toggle(isOn: $settings.zebraStriping) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Enable Zebra Striping")
+                                .font(.system(size: 13, weight: .medium))
+                            Text("Alternates row shading across columns for easier horizontal scanning.")
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .toggleStyle(SwitchToggleStyle(tint: settings.currentAccentColor))
+                }
+                .padding(14)
+                .background(Color(NSColor.controlBackgroundColor))
+                .cornerRadius(8)
+
                 // Window Sizing Section (Moved to Appearance)
                 VStack(alignment: .leading, spacing: 10) {
                     Text("MAXIMUM WINDOW SIZE CEILING")
@@ -4207,7 +4242,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         case .general:
             targetSize = NSSize(width: 640, height: 560)
         case .appearance:
-            targetSize = NSSize(width: 640, height: 580)
+            targetSize = NSSize(width: 640, height: 600)
         case .shortcuts:
             targetSize = NSSize(width: 880, height: 680)
         }
