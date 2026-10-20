@@ -63,6 +63,12 @@
   - [x] Configurable default search scope setting in Settings under General tab.
   - [x] Full 2D navigation and execute across all matched multi-scope shortcut results.
 
+- [x] **Non-Active App Selector with Distinct Dividers & Universal Fuzzy Matcher**
+  - [x] Top-left Scope Dropdown displays clear section dividers: `ACTIVE CONTEXT`, `GLOBAL TOOLS`, and `OTHER RUNNING APPS`.
+  - [x] Dynamically enumerates all other running regular macOS applications with their native icons and localized names.
+  - [x] Selecting any running app immediately loads and renders its cheatsheet without activating the app or switching workspaces.
+  - [x] Universal `FuzzyMatcher` engine powers the search bar and filter matching across both titles and keys.
+
 ---
 
 ## 🚀 Medium Priority

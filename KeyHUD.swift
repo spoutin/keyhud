@@ -1601,9 +1601,22 @@ struct HUDView: View {
         return grp.items[currentItemIndex]
     }
 
+    var currentTargetForExecution: NSRunningApplication? {
+        switch searchState.selectedScope {
+        case .runningApp(let bID, _, _):
+            return NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == bID })
+        default:
+            return nil
+        }
+    }
+
     private func executeCurrentSelection() {
         if let item = currentSelectedItem {
-            onExecute(item)
+            if let customTarget = currentTargetForExecution {
+                ActionExecutor.shared.execute(item: item, targetApp: customTarget)
+            } else {
+                onExecute(item)
+            }
         }
     }
 
@@ -1657,48 +1670,81 @@ struct HUDView: View {
             HStack(spacing: 12) {
                 // Scope Switcher Dropdown Menu
                 Menu {
-                    Button(action: {
-                        searchState.selectedScope = .activeApp
-                    }) {
-                        HStack {
-                            if let icon = appIcon {
-                                Image(nsImage: icon)
+                    // SECTION 1: Active App & Sub-tools
+                    Section("ACTIVE CONTEXT") {
+                        Button(action: {
+                            searchState.selectedScope = .activeApp
+                        }) {
+                            HStack {
+                                if let icon = appIcon {
+                                    Image(nsImage: icon)
+                                }
+                                Text("\(bundleID == "com.mitchellh.ghostty" ? "Ghostty (Main)" : appName) (Active)")
                             }
-                            Text(bundleID == "com.mitchellh.ghostty" ? "Ghostty (Main)" : appName)
                         }
-                    }
 
-                    // Ghostty TUI Sub-profiles
-                    if bundleID == "com.mitchellh.ghostty" {
-                        Menu("Terminal Tools") {
-                            ForEach(groups) { grp in
-                                Button(action: {
-                                    searchState.selectedScope = .ghosttyTool(category: grp.title)
-                                }) {
-                                    HStack {
-                                        Image(systemName: "chevron.left.forwardslash.chevron.right")
-                                        Text(grp.title)
+                        // Ghostty TUI Sub-profiles
+                        if bundleID == "com.mitchellh.ghostty" {
+                            Menu("Terminal Tools") {
+                                ForEach(groups) { grp in
+                                    Button(action: {
+                                        searchState.selectedScope = .ghosttyTool(category: grp.title)
+                                    }) {
+                                        HStack {
+                                            Image(systemName: "chevron.left.forwardslash.chevron.right")
+                                            Text(grp.title)
+                                        }
                                     }
                                 }
                             }
                         }
                     }
 
-                    Button(action: {
-                        searchState.selectedScope = .aerospace
-                    }) {
-                        HStack {
-                            Image(systemName: "macwindow.on.rectangle")
-                            Text("AeroSpace Tiling")
+                    // SECTION 2: Global Shortcuts
+                    Section("GLOBAL TOOLS") {
+                        Button(action: {
+                            searchState.selectedScope = .aerospace
+                        }) {
+                            HStack {
+                                Image(systemName: "macwindow.on.rectangle")
+                                Text("AeroSpace Tiling")
+                            }
+                        }
+
+                        Button(action: {
+                            searchState.selectedScope = .macos
+                        }) {
+                            HStack {
+                                Image(systemName: "apple.logo")
+                                Text("macOS System")
+                            }
                         }
                     }
 
-                    Button(action: {
-                        searchState.selectedScope = .macos
-                    }) {
-                        HStack {
-                            Image(systemName: "apple.logo")
-                            Text("macOS System")
+                    // SECTION 3: Other Running Applications
+                    let otherApps = NSWorkspace.shared.runningApplications.filter {
+                        $0.activationPolicy == .regular &&
+                        $0.bundleIdentifier != Bundle.main.bundleIdentifier &&
+                        $0.bundleIdentifier != bundleID &&
+                        $0.bundleIdentifier != "com.apple.loginwindow"
+                    }.sorted { ($0.localizedName ?? "") < ($1.localizedName ?? "") }
+
+                    if !otherApps.isEmpty {
+                        Section("OTHER RUNNING APPS") {
+                            ForEach(otherApps, id: \.processIdentifier) { app in
+                                let otherName = app.localizedName ?? "App"
+                                let otherBID = app.bundleIdentifier ?? ""
+                                let otherIcon = app.icon ?? NSImage()
+
+                                Button(action: {
+                                    searchState.selectedScope = .runningApp(bundleID: otherBID, name: otherName, icon: otherIcon)
+                                }) {
+                                    HStack {
+                                        Image(nsImage: otherIcon)
+                                        Text(otherName)
+                                    }
+                                }
+                            }
                         }
                     }
                 } label: {
@@ -1973,7 +2019,11 @@ struct HUDView: View {
                                                     onSelect: {
                                                         searchState.selectedGroupIndex = groupIndex
                                                         searchState.selectedItemIndex = itemIndex
-                                                        onExecute(item)
+                                                        if let customTarget = currentTargetForExecution {
+                                                            ActionExecutor.shared.execute(item: item, targetApp: customTarget)
+                                                        } else {
+                                                            onExecute(item)
+                                                        }
                                                     },
                                                     onHover: { hovering in
                                                         searchState.hoveredItemId = hovering ? item.id : nil
