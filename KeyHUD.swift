@@ -2161,39 +2161,98 @@ struct KeybindingEditorView: View {
                                         .textFieldStyle(RoundedBorderTextFieldStyle())
                                         .frame(width: 130)
 
-                                        // Modifier Pills
-                                        HStack(spacing: 2) {
-                                            ForEach(["⌃", "⌥", "⇧", "⌘"], id: \.self) { glyph in
-                                                Button(glyph) {
-                                                    state.insertModifier(glyph, category: category, index: index)
+                                        // Modifier Quick-Insert Pills with Matching Colors
+                                        HStack(spacing: 3) {
+                                            ForEach([
+                                                (glyph: "⌃", label: "⌃", color: Color(red: 0.78, green: 0.48, blue: 1.0)),
+                                                (glyph: "⌥", label: "⌥", color: Color(red: 1.0, green: 0.62, blue: 0.20)),
+                                                (glyph: "⇧", label: "⇧", color: Color(red: 0.30, green: 0.86, blue: 0.55)),
+                                                (glyph: "⌘", label: "⌘", color: Color(red: 0.35, green: 0.65, blue: 1.0))
+                                            ], id: \.glyph) { item in
+                                                Button(action: {
+                                                    state.insertModifier(item.glyph, category: category, index: index)
+                                                }) {
+                                                    Text(item.label)
+                                                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                                        .foregroundColor(item.color)
+                                                        .frame(width: 22, height: 20)
+                                                        .background(
+                                                            RoundedRectangle(cornerRadius: 4)
+                                                                .fill(item.color.opacity(0.18))
+                                                        )
+                                                        .overlay(
+                                                            RoundedRectangle(cornerRadius: 4)
+                                                                .stroke(item.color.opacity(0.40), lineWidth: 0.75)
+                                                        )
                                                 }
                                                 .buttonStyle(PlainButtonStyle())
-                                                .font(.system(size: 11, weight: .semibold))
-                                                .frame(width: 22, height: 20)
-                                                .background(Color(NSColor.controlBackgroundColor))
-                                                .cornerRadius(4)
                                             }
 
-                                            Button("Space") {
+                                            Button(action: {
                                                 state.insertModifier("Space", category: category, index: index)
+                                            }) {
+                                                Text("␣ Space")
+                                                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                                                    .foregroundColor(Color(red: 0.28, green: 0.82, blue: 0.90))
+                                                    .padding(.horizontal, 5)
+                                                    .frame(height: 20)
+                                                    .background(
+                                                        RoundedRectangle(cornerRadius: 4)
+                                                            .fill(Color(red: 0.28, green: 0.82, blue: 0.90).opacity(0.18))
+                                                    )
+                                                    .overlay(
+                                                        RoundedRectangle(cornerRadius: 4)
+                                                            .stroke(Color(red: 0.28, green: 0.82, blue: 0.90).opacity(0.40), lineWidth: 0.75)
+                                                    )
                                             }
                                             .buttonStyle(PlainButtonStyle())
-                                            .font(.system(size: 10, weight: .medium))
-                                            .padding(.horizontal, 4)
-                                            .frame(height: 20)
-                                            .background(Color(NSColor.controlBackgroundColor))
-                                            .cornerRadius(4)
 
-                                            Button("Esc") {
+                                            Button(action: {
                                                 state.insertModifier("Esc", category: category, index: index)
+                                            }) {
+                                                Text("⎋ Esc")
+                                                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                                                    .foregroundColor(Color(red: 1.0, green: 0.38, blue: 0.45))
+                                                    .padding(.horizontal, 5)
+                                                    .frame(height: 20)
+                                                    .background(
+                                                        RoundedRectangle(cornerRadius: 4)
+                                                            .fill(Color(red: 1.0, green: 0.38, blue: 0.45).opacity(0.18))
+                                                    )
+                                                    .overlay(
+                                                        RoundedRectangle(cornerRadius: 4)
+                                                            .stroke(Color(red: 1.0, green: 0.38, blue: 0.45).opacity(0.40), lineWidth: 0.75)
+                                                    )
                                             }
                                             .buttonStyle(PlainButtonStyle())
-                                            .font(.system(size: 10, weight: .medium))
-                                            .padding(.horizontal, 4)
-                                            .frame(height: 20)
-                                            .background(Color(NSColor.controlBackgroundColor))
-                                            .cornerRadius(4)
                                         }
+
+                                        // Live Tokenized Badge Preview
+                                        HStack(spacing: 2) {
+                                            let tokens = KeyTokenParser.parse(currentKeys)
+                                            if tokens.isEmpty {
+                                                Text("—")
+                                                    .font(.system(size: 10))
+                                                    .foregroundColor(.secondary)
+                                            } else {
+                                                ForEach(Array(tokens.enumerated()), id: \.offset) { _, token in
+                                                    Text(token.text)
+                                                        .font(.system(size: token.isSpecial ? 10 : 9, weight: .bold, design: .monospaced))
+                                                        .padding(.horizontal, token.isSpecial ? 4 : 3)
+                                                        .padding(.vertical, 1)
+                                                        .foregroundColor(token.color)
+                                                        .background(
+                                                            RoundedRectangle(cornerRadius: 3)
+                                                                .fill(token.color.opacity(0.18))
+                                                        )
+                                                        .overlay(
+                                                            RoundedRectangle(cornerRadius: 3)
+                                                                .stroke(token.color.opacity(0.40), lineWidth: 0.6)
+                                                        )
+                                                }
+                                            }
+                                        }
+                                        .frame(minWidth: 70, alignment: .leading)
 
                                         Button(action: {
                                             state.deleteShortcut(category: category, index: index)
