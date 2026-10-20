@@ -360,6 +360,78 @@ class FavoritesManager: ObservableObject {
     }
 }
 
+// MARK: - Key Combo Decoder for Recording
+
+struct KeyComboDecoder {
+    static func keyCodeToString(_ keyCode: UInt16) -> String {
+        switch Int(keyCode) {
+        case kVK_Return: return "↩"
+        case kVK_Tab: return "Tab"
+        case kVK_Space: return "Space"
+        case kVK_Delete: return "⌫"
+        case kVK_Escape: return "Esc"
+        case kVK_ForwardDelete: return "⌦"
+        case kVK_LeftArrow: return "←"
+        case kVK_RightArrow: return "→"
+        case kVK_DownArrow: return "↓"
+        case kVK_UpArrow: return "↑"
+        case kVK_F1: return "F1"
+        case kVK_F2: return "F2"
+        case kVK_F3: return "F3"
+        case kVK_F4: return "F4"
+        case kVK_F5: return "F5"
+        case kVK_F6: return "F6"
+        case kVK_F7: return "F7"
+        case kVK_F8: return "F8"
+        case kVK_F9: return "F9"
+        case kVK_F10: return "F10"
+        case kVK_F11: return "F11"
+        case kVK_F12: return "F12"
+        default:
+            let keyMap: [Int: String] = [
+                0: "A", 1: "S", 2: "D", 3: "F", 4: "H", 5: "G", 6: "Z", 7: "X", 8: "C", 9: "V",
+                11: "B", 12: "Q", 13: "W", 14: "E", 15: "R", 16: "Y", 17: "T", 18: "1", 19: "2",
+                20: "3", 21: "4", 22: "6", 23: "5", 24: "=", 25: "9", 26: "7", 27: "-", 28: "8",
+                29: "0", 30: "]", 31: "O", 32: "U", 33: "[", 34: "I", 35: "P", 37: "L", 38: "J",
+                39: "'", 40: "K", 41: ";", 42: "\\", 43: ",", 44: "/", 45: "N", 46: "M", 47: ".",
+                50: "`"
+            ]
+            return keyMap[Int(keyCode)] ?? ""
+        }
+    }
+
+    static func decode(flags: NSEvent.ModifierFlags, keyCode: UInt16) -> (result: String?, isCancel: Bool, isClear: Bool) {
+        let cleanFlags = flags.intersection(.deviceIndependentFlagsMask)
+
+        // Bare escape cancels
+        if cleanFlags.isEmpty && Int(keyCode) == kVK_Escape {
+            return (nil, true, false)
+        }
+
+        // Bare delete/backspace clears
+        if cleanFlags.isEmpty && (Int(keyCode) == kVK_Delete || Int(keyCode) == kVK_ForwardDelete) {
+            return ("", false, true)
+        }
+
+        let keyStr = keyCodeToString(keyCode)
+        guard !keyStr.isEmpty else { return (nil, false, false) }
+
+        var combo = ""
+        if cleanFlags.contains(.control) { combo += "⌃" }
+        if cleanFlags.contains(.option) { combo += "⌥" }
+        if cleanFlags.contains(.shift) { combo += "⇧" }
+        if cleanFlags.contains(.command) { combo += "⌘" }
+
+        let isSpecial = Int(keyCode) >= kVK_F1 && Int(keyCode) <= kVK_F12 || Int(keyCode) == kVK_Space || Int(keyCode) == kVK_Tab || Int(keyCode) == kVK_Return
+        if combo.isEmpty && !isSpecial {
+            combo += "⌘"
+        }
+
+        combo += keyStr
+        return (combo, false, false)
+    }
+}
+
 // MARK: - Custom Shortcuts Manager & Importer
 
 class CustomShortcutsManager {
@@ -843,6 +915,48 @@ class EditorState: ObservableObject {
     @Published var isAddingCategory: Bool = false
     @Published var isAddingApp: Bool = false
     @Published var newAppBundleID: String = ""
+    @Published var recordingCategory: String? = nil
+    @Published var recordingIndex: Int? = nil
+
+    var isRecording: Bool {
+        recordingCategory != nil && recordingIndex != nil
+    }
+
+    func startRecording(category: String, index: Int) {
+        recordingCategory = category
+        recordingIndex = index
+    }
+
+    func stopRecording() {
+        recordingCategory = nil
+        recordingIndex = nil
+    }
+
+    func handleRecordedKey(flags: NSEvent.ModifierFlags, keyCode: UInt16) -> Bool {
+        guard let cat = recordingCategory, let idx = recordingIndex else { return false }
+        let (result, isCancel, isClear) = KeyComboDecoder.decode(flags: flags, keyCode: keyCode)
+
+        if isCancel {
+            stopRecording()
+            return true
+        }
+
+        if isClear {
+            let currentTitle = config[selectedBundleID]?[cat]?[idx]["title"] ?? ""
+            updateShortcut(category: cat, index: idx, title: currentTitle, keys: "")
+            stopRecording()
+            return true
+        }
+
+        if let combo = result {
+            let currentTitle = config[selectedBundleID]?[cat]?[idx]["title"] ?? ""
+            updateShortcut(category: cat, index: idx, title: currentTitle, keys: combo)
+            stopRecording()
+            return true
+        }
+
+        return false
+    }
 
     var isDirty: Bool {
         config != savedConfig
@@ -3025,119 +3139,128 @@ struct KeybindingEditorView: View {
                                     let currentTitle = item["title"] ?? ""
                                     let currentKeys = item["keys"] ?? ""
 
-                                    HStack(spacing: 8) {
+                                    let isThisRowRecording = (state.recordingCategory == category && state.recordingIndex == index)
+
+                                    HStack(spacing: 10) {
                                         TextField("Title", text: Binding(
                                             get: { currentTitle },
                                             set: { state.updateShortcut(category: category, index: index, title: $0, keys: currentKeys) }
                                         ))
                                         .textFieldStyle(RoundedBorderTextFieldStyle())
-                                        .frame(minWidth: 160)
+                                        .frame(minWidth: 200, maxWidth: .infinity, alignment: .leading)
 
-                                        TextField("Keys", text: Binding(
-                                            get: { currentKeys },
-                                            set: { state.updateShortcut(category: category, index: index, title: currentTitle, keys: $0) }
-                                        ))
-                                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                                        .frame(width: 130)
+                                        if isThisRowRecording {
+                                            // Active Recording Indicator Pill
+                                            HStack(spacing: 6) {
+                                                Circle()
+                                                    .fill(Color.red)
+                                                    .frame(width: 8, height: 8)
+                                                Text("Type shortcut...")
+                                                    .font(.system(size: 11, weight: .bold))
+                                                    .foregroundColor(.white)
 
-                                        // Modifier Quick-Insert Pills with Matching Colors
-                                        HStack(spacing: 3) {
-                                            ForEach([
-                                                (glyph: "⌃", label: "⌃", color: Color(red: 0.78, green: 0.48, blue: 1.0)),
-                                                (glyph: "⌥", label: "⌥", color: Color(red: 1.0, green: 0.62, blue: 0.20)),
-                                                (glyph: "⇧", label: "⇧", color: Color(red: 0.30, green: 0.86, blue: 0.55)),
-                                                (glyph: "⌘", label: "⌘", color: Color(red: 0.35, green: 0.65, blue: 1.0))
-                                            ], id: \.glyph) { item in
-                                                Button(action: {
-                                                    state.insertModifier(item.glyph, category: category, index: index)
-                                                }) {
-                                                    Text(item.label)
-                                                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                                        .foregroundColor(item.color)
-                                                        .frame(width: 22, height: 20)
-                                                        .background(
-                                                            RoundedRectangle(cornerRadius: 4)
-                                                                .fill(item.color.opacity(0.18))
-                                                        )
-                                                        .overlay(
-                                                            RoundedRectangle(cornerRadius: 4)
-                                                                .stroke(item.color.opacity(0.40), lineWidth: 0.75)
-                                                        )
+                                                Button(action: { state.stopRecording() }) {
+                                                    Image(systemName: "xmark.circle.fill")
+                                                        .foregroundColor(.white.opacity(0.7))
+                                                        .font(.system(size: 11))
                                                 }
                                                 .buttonStyle(PlainButtonStyle())
+                                                .help("Cancel recording (Esc)")
                                             }
-
-                                            Button(action: {
-                                                state.insertModifier("Space", category: category, index: index)
-                                            }) {
-                                                Text("␣ Space")
-                                                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                                                    .foregroundColor(Color(red: 0.28, green: 0.82, blue: 0.90))
-                                                    .padding(.horizontal, 5)
-                                                    .frame(height: 20)
-                                                    .background(
-                                                        RoundedRectangle(cornerRadius: 4)
-                                                            .fill(Color(red: 0.28, green: 0.82, blue: 0.90).opacity(0.18))
-                                                    )
-                                                    .overlay(
-                                                        RoundedRectangle(cornerRadius: 4)
-                                                            .stroke(Color(red: 0.28, green: 0.82, blue: 0.90).opacity(0.40), lineWidth: 0.75)
-                                                    )
-                                            }
-                                            .buttonStyle(PlainButtonStyle())
-
-                                            Button(action: {
-                                                state.insertModifier("Esc", category: category, index: index)
-                                            }) {
-                                                Text("⎋ Esc")
-                                                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                                                    .foregroundColor(Color(red: 1.0, green: 0.38, blue: 0.45))
-                                                    .padding(.horizontal, 5)
-                                                    .frame(height: 20)
-                                                    .background(
-                                                        RoundedRectangle(cornerRadius: 4)
-                                                            .fill(Color(red: 1.0, green: 0.38, blue: 0.45).opacity(0.18))
-                                                    )
-                                                    .overlay(
-                                                        RoundedRectangle(cornerRadius: 4)
-                                                            .stroke(Color(red: 1.0, green: 0.38, blue: 0.45).opacity(0.40), lineWidth: 0.75)
-                                                    )
-                                            }
-                                            .buttonStyle(PlainButtonStyle())
-                                        }
-
-                                        // Live Tokenized Badge Preview
-                                        HStack(spacing: 2) {
-                                            let tokens = KeyTokenParser.parse(currentKeys)
-                                            if tokens.isEmpty {
-                                                Text("—")
-                                                    .font(.system(size: 10))
-                                                    .foregroundColor(.secondary)
-                                            } else {
-                                                ForEach(Array(tokens.enumerated()), id: \.offset) { _, token in
-                                                    Text(token.text)
-                                                        .font(.system(size: token.isSpecial ? 10 : 9, weight: .bold, design: .monospaced))
-                                                        .padding(.horizontal, token.isSpecial ? 4 : 3)
-                                                        .padding(.vertical, 1)
-                                                        .foregroundColor(token.color)
-                                                        .background(
-                                                            RoundedRectangle(cornerRadius: 3)
-                                                                .fill(token.color.opacity(0.18))
-                                                        )
-                                                        .overlay(
-                                                            RoundedRectangle(cornerRadius: 3)
-                                                                .stroke(token.color.opacity(0.40), lineWidth: 0.6)
-                                                        )
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 5)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 6)
+                                                    .fill(Color.red.opacity(0.18))
+                                            )
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 6)
+                                                    .stroke(Color.red.opacity(0.6), lineWidth: 1.2)
+                                            )
+                                        } else {
+                                            // Live Colored Tokenized Badge Preview
+                                            HStack(spacing: 3) {
+                                                let tokens = KeyTokenParser.parse(currentKeys)
+                                                if tokens.isEmpty {
+                                                    Text("None")
+                                                        .font(.system(size: 11, weight: .medium))
+                                                        .foregroundColor(.secondary)
+                                                        .padding(.horizontal, 8)
+                                                        .padding(.vertical, 3)
+                                                } else {
+                                                    ForEach(Array(tokens.enumerated()), id: \.offset) { _, token in
+                                                        Text(token.text)
+                                                            .font(.system(size: token.isSpecial ? 11 : 10, weight: .bold, design: .monospaced))
+                                                            .padding(.horizontal, token.isSpecial ? 6 : 5)
+                                                            .padding(.vertical, 3)
+                                                            .foregroundColor(token.color)
+                                                            .background(
+                                                                RoundedRectangle(cornerRadius: 4)
+                                                                    .fill(token.color.opacity(0.18))
+                                                            )
+                                                            .overlay(
+                                                                RoundedRectangle(cornerRadius: 4)
+                                                                    .stroke(token.color.opacity(0.40), lineWidth: 0.8)
+                                                            )
+                                                    }
                                                 }
                                             }
-                                        }
-                                        .frame(minWidth: 70, alignment: .leading)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 3)
+                                            .background(Color.white.opacity(0.04))
+                                            .cornerRadius(6)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 6)
+                                                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                                            )
 
+                                            // 1-Click Record Button
+                                            Button(action: {
+                                                state.startRecording(category: category, index: index)
+                                            }) {
+                                                HStack(spacing: 4) {
+                                                    Image(systemName: "record.circle")
+                                                        .font(.system(size: 12, weight: .semibold))
+                                                        .foregroundColor(accent)
+                                                    Text("Record")
+                                                        .font(.system(size: 11, weight: .semibold))
+                                                        .foregroundColor(accent)
+                                                }
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 4)
+                                                .background(accent.opacity(0.12))
+                                                .cornerRadius(6)
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 6)
+                                                        .stroke(accent.opacity(0.35), lineWidth: 1)
+                                                )
+                                            }
+                                            .buttonStyle(PlainButtonStyle())
+                                            .help("Press keys on keyboard to record shortcut")
+
+                                            // Clear shortcut button (if keys present)
+                                            if !currentKeys.isEmpty {
+                                                Button(action: {
+                                                    state.updateShortcut(category: category, index: index, title: currentTitle, keys: "")
+                                                }) {
+                                                    Image(systemName: "xmark")
+                                                        .font(.system(size: 9, weight: .bold))
+                                                        .foregroundColor(.secondary)
+                                                        .padding(4)
+                                                }
+                                                .buttonStyle(PlainButtonStyle())
+                                                .help("Clear shortcut")
+                                            }
+                                        }
+
+                                        // Delete Shortcut Button
                                         Button(action: {
                                             state.deleteShortcut(category: category, index: index)
                                         }) {
-                                            Image(systemName: "xmark.circle.fill")
-                                                .foregroundColor(.gray)
+                                            Image(systemName: "trash")
+                                                .font(.system(size: 11))
+                                                .foregroundColor(.secondary)
+                                                .padding(4)
                                         }
                                         .buttonStyle(PlainButtonStyle())
                                         .help("Delete Shortcut")
@@ -3858,6 +3981,13 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self = self, let win = self.window, win.isKeyWindow else { return event }
+
+            // If editor is currently recording a shortcut, intercept and decode keystroke!
+            if EditorState.shared.isRecording {
+                if EditorState.shared.handleRecordedKey(flags: event.modifierFlags, keyCode: event.keyCode) {
+                    return nil
+                }
+            }
 
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             if flags == .command && event.keyCode == 13 { // '⌘W'
