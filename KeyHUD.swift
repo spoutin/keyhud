@@ -1,6 +1,7 @@
 import Cocoa
 import SwiftUI
 import ApplicationServices
+import ServiceManagement
 
 // MARK: - Models
 
@@ -147,6 +148,12 @@ class AppSettings: ObservableObject {
             UserDefaults.standard.set(isPinned, forKey: "isPinned")
         }
     }
+    @Published var launchAtLogin: Bool {
+        didSet {
+            UserDefaults.standard.set(launchAtLogin, forKey: "launchAtLogin")
+            _ = LaunchAtLoginManager.shared.setEnabled(launchAtLogin)
+        }
+    }
     @Published var selectedSettingsTab: String = SettingsTab.general.rawValue
 
     var currentAccentColor: Color {
@@ -184,6 +191,72 @@ class AppSettings: ObservableObject {
         self.accentTheme = (savedTheme != nil && AccentTheme(rawValue: savedTheme!) != nil) ? savedTheme! : AccentTheme.cyan.rawValue
 
         self.isPinned = UserDefaults.standard.bool(forKey: "isPinned")
+        self.launchAtLogin = LaunchAtLoginManager.shared.isEnabled
+    }
+}
+
+// MARK: - Launch at Login Manager
+
+class LaunchAtLoginManager: ObservableObject {
+    static let shared = LaunchAtLoginManager()
+    let bundleID = "com.ablack.KeyHUD"
+    let appPath = "/Applications/KeyHUD.app"
+
+    var launchAgentURL: URL {
+        let libraryDir = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first!
+        return libraryDir.appendingPathComponent("LaunchAgents/\(bundleID).plist")
+    }
+
+    var isEnabled: Bool {
+        if #available(macOS 13.0, *) {
+            let status = SMAppService.mainApp.status
+            if status == .enabled { return true }
+        }
+        return FileManager.default.fileExists(atPath: launchAgentURL.path)
+    }
+
+    func setEnabled(_ enable: Bool) -> Bool {
+        if #available(macOS 13.0, *) {
+            do {
+                if enable {
+                    try SMAppService.mainApp.register()
+                    return true
+                } else {
+                    try SMAppService.mainApp.unregister()
+                    try? FileManager.default.removeItem(at: launchAgentURL)
+                    return true
+                }
+            } catch {
+                // Fall back to user LaunchAgent plist
+            }
+        }
+
+        if enable {
+            return createLaunchAgentPlist()
+        } else {
+            try? FileManager.default.removeItem(at: launchAgentURL)
+            return true
+        }
+    }
+
+    private func createLaunchAgentPlist() -> Bool {
+        let executablePath = "\(appPath)/Contents/MacOS/KeyHUD"
+        let plistDict: [String: Any] = [
+            "Label": bundleID,
+            "ProgramArguments": [executablePath],
+            "RunAtLoad": true,
+            "ProcessType": "Interactive",
+            "LimitLoadToSessionType": "Aqua"
+        ]
+        do {
+            let data = try PropertyListSerialization.data(fromPropertyList: plistDict, format: .xml, options: 0)
+            let folder = launchAgentURL.deletingLastPathComponent()
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try data.write(to: launchAgentURL)
+            return true
+        } catch {
+            return false
+        }
     }
 }
 
@@ -2671,6 +2744,33 @@ struct SettingsView: View {
                         }
                         .padding(.top, 4)
                     }
+
+                    Divider()
+                        .padding(.vertical, 2)
+
+                    // Launch at Login Toggle
+                    Button(action: {
+                        settings.launchAtLogin.toggle()
+                    }) {
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: settings.launchAtLogin ? "checkmark.square.fill" : "square")
+                                .foregroundColor(settings.launchAtLogin ? settings.currentAccentColor : .secondary)
+                                .font(.system(size: 15))
+                                .padding(.top, 1)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Launch at Login (Start on Boot)")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundColor(.primary)
+                                Text("Automatically start KeyHUD in the background when logging into your Mac.")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer()
+                        }
+                    }
+                    .buttonStyle(PlainButtonStyle())
 
                     Divider()
                         .padding(.vertical, 2)
