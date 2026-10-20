@@ -3822,8 +3822,10 @@ struct SettingsView: View {
     }
 }
 
-class SettingsWindowController: NSWindowController {
+class SettingsWindowController: NSWindowController, NSWindowDelegate {
     static let shared = SettingsWindowController()
+    private var isHandlingClosePrompt = false
+    private var eventMonitor: Any?
 
     init() {
         let initialTab = SettingsTab(rawValue: AppSettings.shared.selectedSettingsTab) ?? .general
@@ -3847,10 +3849,65 @@ class SettingsWindowController: NSWindowController {
         window.isReleasedWhenClosed = false
         super.init(window: window)
 
+        window.delegate = self
+
         let view = SettingsView { [weak self] in
-            self?.close()
+            self?.window?.performClose(nil)
         }
         window.contentView = NSHostingView(rootView: view)
+
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self = self, let win = self.window, win.isKeyWindow else { return event }
+
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            if flags == .command && event.keyCode == 13 { // '⌘W'
+                // Check if user is actively focused on an editable text input (field editor)
+                if let responder = win.firstResponder, responder is NSTextView {
+                    // Do not close; allow field editing / shortcut typing
+                    return event
+                }
+
+                // Not editing a text field -> perform close with dirty protection
+                win.performClose(nil)
+                return nil
+            }
+            return event
+        }
+    }
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        if !EditorState.shared.isDirty {
+            return true
+        }
+
+        if isHandlingClosePrompt {
+            return false
+        }
+
+        isHandlingClosePrompt = true
+        let alert = NSAlert()
+        alert.messageText = "Do you want to save your changes before closing?"
+        alert.informativeText = "Your keybinding modifications will be lost if you don't save them."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: "Don't Save")
+
+        alert.beginSheetModal(for: sender) { [weak self, weak sender] response in
+            self?.isHandlingClosePrompt = false
+            switch response {
+            case .alertFirstButtonReturn: // Save
+                EditorState.shared.save()
+                sender?.close()
+            case .alertThirdButtonReturn: // Don't Save
+                EditorState.shared.revert()
+                sender?.close()
+            default: // Cancel
+                break
+            }
+        }
+
+        return false
     }
 
     required init?(coder: NSCoder) {
