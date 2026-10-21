@@ -1,0 +1,131 @@
+name: Build & Release KeyHUD
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version string (e.g. 1.0.0)'
+        required: false
+        default: '1.0.0'
+
+jobs:
+  build:
+    name: Build, Sign & Release
+    runs-on: macos-14
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set Release Version
+        id: vars
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          elif [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="1.0.0-${GITHUB_SHA::7}"
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Version is $VERSION"
+
+      - name: Setup Temporary Build Keychain
+        if: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 != '' }}
+        env:
+          BUILD_KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD || 'temporary-build-password-123' }}
+          CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/build.keychain
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
+
+          # Create ephemeral keychain
+          security create-keychain -p "$BUILD_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$BUILD_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Import p12 certificate
+          P12_PATH=$RUNNER_TEMP/certificate.p12
+          echo "$CERTIFICATE_P12_BASE64" | base64 --decode > "$P12_PATH"
+          security import "$P12_PATH" -k "$KEYCHAIN_PATH" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm -f "$P12_PATH"
+
+          # Allow codesign without UI prompts
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$BUILD_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+
+      - name: Build KeyHUD Application & DMG
+        env:
+          OUTPUT_DIR: build/KeyHUD.app
+          PACKAGE_DMG: "true"
+          PACKAGE_ZIP: "true"
+          DMG_PATH: "KeyHUD-${{ env.VERSION }}.dmg"
+          ZIP_PATH: "KeyHUD-${{ env.VERSION }}.zip"
+          CODESIGN_IDENTITY: ${{ secrets.APPLE_DEVELOPER_ID_NAME }}
+        run: |
+          chmod +x ./build.sh
+          ./build.sh
+
+      - name: Notarize and Staple (Apple Notary Service)
+        if: ${{ secrets.NOTARY_API_KEY_BASE64 != '' && secrets.NOTARY_KEY_ID != '' && secrets.NOTARY_ISSUER_ID != '' }}
+        env:
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+          NOTARY_API_KEY_BASE64: ${{ secrets.NOTARY_API_KEY_BASE64 }}
+        run: |
+          P8_PATH="$RUNNER_TEMP/AuthKey_${NOTARY_KEY_ID}.p8"
+          echo "$NOTARY_API_KEY_BASE64" | base64 --decode > "$P8_PATH"
+
+          echo "==> Submitting DMG to Apple Notary Service..."
+          xcrun notarytool submit "KeyHUD-${{ env.VERSION }}.dmg" \
+            --key "$P8_PATH" \
+            --key-id "$NOTARY_KEY_ID" \
+            --issuer "$NOTARY_ISSUER_ID" \
+            --wait
+
+          echo "==> Stapling notarization ticket to DMG..."
+          xcrun stapler staple "KeyHUD-${{ env.VERSION }}.dmg"
+
+          echo "==> Submitting ZIP to Apple Notary Service..."
+          xcrun notarytool submit "KeyHUD-${{ env.VERSION }}.zip" \
+            --key "$P8_PATH" \
+            --key-id "$NOTARY_KEY_ID" \
+            --issuer "$NOTARY_ISSUER_ID" \
+            --wait
+
+          rm -f "$P8_PATH"
+
+      - name: Compute Checksums
+        run: |
+          shasum -a 256 KeyHUD-${{ env.VERSION }}.dmg > KeyHUD-${{ env.VERSION }}.dmg.sha256
+          shasum -a 256 KeyHUD-${{ env.VERSION }}.zip > KeyHUD-${{ env.VERSION }}.zip.sha256
+          cat KeyHUD-${{ env.VERSION }}.dmg.sha256
+          cat KeyHUD-${{ env.VERSION }}.zip.sha256
+
+      - name: Clean Up Keychain
+        if: always() && env.KEYCHAIN_PATH != ''
+        run: |
+          security delete-keychain "$KEYCHAIN_PATH" || true
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "KeyHUD v${{ env.VERSION }}"
+          tag_name: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            KeyHUD-${{ env.VERSION }}.dmg
+            KeyHUD-${{ env.VERSION }}.dmg.sha256
+            KeyHUD-${{ env.VERSION }}.zip
+            KeyHUD-${{ env.VERSION }}.zip.sha256

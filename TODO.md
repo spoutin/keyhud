@@ -141,6 +141,12 @@
   - [x] Press `Enter` or click to execute actions directly via Accessibility API (`AXUIElementPerformAction`).
   - [x] Configurable in Settings (During Search Only, Always, Shortcuts Only) and quick-toggle button in HUD header.
 
+- [x] **Apple Code Signing, Hardened Runtime & GitHub Actions Pipeline**
+  - [x] App entitlements (`KeyHUD.entitlements`) with Hardened Runtime permissions and Apple Events automation.
+  - [x] Multi-mode `build.sh` supporting both local ad-hoc builds and Apple Developer ID distribution with DMG/ZIP packaging.
+  - [x] Full CI/CD release workflow (`.github/workflows/release.yml`) for building, codesigning with temporary keychain, notarizing via Apple `notarytool`, ticket stapling, checksum generation, and publishing GitHub Releases.
+  - [x] Developer guide and secret configuration reference (`docs/SIGNING_AND_SECRETS.md`).
+
 - [x] **Hotkey Conflict Detection & Summary Banner**
   - [x] Canonical normalization for duplicate shortcut matching across modifier permutations.
   - [x] Internal app conflict detection (same shortcut assigned to multiple commands in the same app).

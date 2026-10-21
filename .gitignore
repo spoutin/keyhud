@@ -1,0 +1,6 @@
+# Build and distribution artifacts
+*.dmg
+*.zip
+*.sha256
+build/
+/tmp/KeyHUD
