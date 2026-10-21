@@ -7,7 +7,7 @@ import Carbon
 // MARK: - Models
 
 struct ShortcutItem: Identifiable, Equatable {
-    var id = UUID()
+    var id: String { "\(title)::\(keys)" }
     let title: String
     let keys: String
     var axElement: AXUIElement? = nil
@@ -15,14 +15,18 @@ struct ShortcutItem: Identifiable, Equatable {
     var isMenuAction: Bool { keys.trimmingCharacters(in: .whitespaces).isEmpty }
 
     static func == (lhs: ShortcutItem, rhs: ShortcutItem) -> Bool {
-        lhs.id == rhs.id && lhs.title == rhs.title && lhs.keys == rhs.keys
+        lhs.title == rhs.title && lhs.keys == rhs.keys
     }
 }
 
 struct ShortcutGroup: Identifiable, Equatable {
-    var id = UUID()
+    var id: String { title }
     let title: String
     let items: [ShortcutItem]
+
+    static func == (lhs: ShortcutGroup, rhs: ShortcutGroup) -> Bool {
+        lhs.title == rhs.title && lhs.items == rhs.items
+    }
 }
 
 enum AccentTheme: String, CaseIterable, Identifiable {
@@ -761,8 +765,19 @@ class CustomShortcutsManager {
         let config = loadConfig()
         guard let appConfig = config[bundleID] else { return nil }
 
+        let sortedTitles = appConfig.keys.sorted { a, b in
+            if a == "Ghostty & Herdr" { return true }
+            if b == "Ghostty & Herdr" { return false }
+            if a == "Zsh & Shell" { return true }
+            if b == "Zsh & Shell" { return false }
+            if a.starts(with: "Neovim") && !b.starts(with: "Neovim") { return true }
+            if !a.starts(with: "Neovim") && b.starts(with: "Neovim") { return false }
+            return a < b
+        }
+
         var result: [ShortcutGroup] = []
-        for (groupTitle, itemsList) in appConfig {
+        for groupTitle in sortedTitles {
+            guard let itemsList = appConfig[groupTitle] else { continue }
             var items: [ShortcutItem] = []
             for itemDict in itemsList {
                 if let title = itemDict["title"], let keys = itemDict["keys"] {
@@ -1386,13 +1401,21 @@ class EditorState: ObservableObject {
 
     var currentCategories: [String] {
         guard let appDict = config[selectedBundleID] else { return [] }
-        return appDict.keys.sorted()
+        return appDict.keys.sorted { a, b in
+            if a == "Ghostty & Herdr" { return true }
+            if b == "Ghostty & Herdr" { return false }
+            if a == "Zsh & Shell" { return true }
+            if b == "Zsh & Shell" { return false }
+            if a.starts(with: "Neovim") && !b.starts(with: "Neovim") { return true }
+            if !a.starts(with: "Neovim") && b.starts(with: "Neovim") { return false }
+            return a < b
+        }
     }
 
     func currentGroups() -> [ShortcutGroup] {
         guard let appDict = config[selectedBundleID] else { return [] }
         var result: [ShortcutGroup] = []
-        for cat in appDict.keys.sorted() {
+        for cat in currentCategories {
             let list = appDict[cat] ?? []
             let items = list.map { dict in
                 ShortcutItem(title: dict["title"] ?? "", keys: dict["keys"] ?? "")
@@ -1924,7 +1947,7 @@ class SearchState: ObservableObject {
     }
     @Published var selectedGroupIndex: Int = 0
     @Published var selectedItemIndex: Int = 0
-    @Published var hoveredItemId: UUID? = nil
+    @Published var hoveredItemId: String? = nil
     @Published var selectedScope: HUDScope = .activeApp {
         didSet {
             query = ""
@@ -5039,7 +5062,11 @@ class HotKeyManager {
             self?.handleFlagsChanged(event)
         }
 
-        NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
+        NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            // If any key is typed while Command is held (e.g. Cmd+Tab, Cmd+C, Cmd+Space),
+            // immediately cancel modifier-hold HUD trigger so app-switching never toggles the HUD
+            self?.cancelCmdHold()
+
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             if event.keyCode == 44 && flags.contains(.command) && flags.contains(.shift) {
                 DispatchQueue.main.async {
@@ -5054,8 +5081,10 @@ class HotKeyManager {
             return event
         }
 
-        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             if EditorState.shared.isRecording { return event }
+            self?.cancelCmdHold()
+
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             if event.keyCode == 44 && flags.contains(.command) && flags.contains(.shift) {
                 DispatchQueue.main.async {
@@ -5092,6 +5121,12 @@ class HotKeyManager {
             0,
             &carbonHotKeyRef
         )
+    }
+
+    func cancelCmdHold() {
+        cmdWorkItem?.cancel()
+        cmdWorkItem = nil
+        shouldIgnoreNextCmdUp = true
     }
 
     private func handleFlagsChanged(_ event: NSEvent) {

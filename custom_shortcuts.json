@@ -226,12 +226,12 @@
         "title" : "FZF Directory Jump"
       },
       {
-        "keys" : "⌥F",
-        "title" : "Forward Word (Ghostty)"
+        "keys" : "⇧⌘F",
+        "title" : "Forward Word"
       },
       {
-        "keys" : "⌥B",
-        "title" : "Backward Word (Ghostty)"
+        "keys" : "⇧⌘B",
+        "title" : "Backward Word"
       },
       {
         "keys" : "⌥Space",
