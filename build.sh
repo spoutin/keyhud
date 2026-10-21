@@ -22,6 +22,9 @@ rm -rf "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR/Contents/MacOS"
 mkdir -p "$OUTPUT_DIR/Contents/Resources"
 
+# Copy Resources (AppIcon.icns, etc)
+cp -r "$CONFIG_DIR/Sources/KeyHUD/Resources/"* "$OUTPUT_DIR/Contents/Resources/" 2>/dev/null || true
+
 cp "/tmp/$BIN_NAME" "$OUTPUT_DIR/Contents/MacOS/$BIN_NAME"
 chmod +x "$OUTPUT_DIR/Contents/MacOS/$BIN_NAME"
 
@@ -38,6 +41,8 @@ cat << EOF > "$OUTPUT_DIR/Contents/Info.plist"
     <string>KeyHUD</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundleShortVersionString</key>
     <string>$VERSION</string>
     <key>CFBundleVersion</key>
