@@ -110,7 +110,23 @@ class HotKeyManager {
 
     private func onCmdDown() {
         let now = Date()
-        lastTapTimes = lastTapTimes.filter { now.timeIntervalSince($0) < tapWindow }
+
+        // Filter taps based on consecutive gaps rather than absolute time from first tap.
+        // This ensures triple-taps don't drop the first tap just because the total sequence took > tapWindow.
+        var validTaps = [now]
+        for i in (0..<lastTapTimes.count).reversed() {
+            let current = (i == lastTapTimes.count - 1) ? now : lastTapTimes[i+1]
+            let prev = lastTapTimes[i]
+            if current.timeIntervalSince(prev) < tapWindow {
+                validTaps.insert(prev, at: 0)
+            } else {
+                break
+            }
+        }
+        
+        // Remove the 'now' we just appended so lastTapTimes only contains prior completed taps (up events).
+        validTaps.removeLast()
+        lastTapTimes = validTaps
 
         let trigger = TriggerType(rawValue: AppSettings.shared.triggerType) ?? .doubleTapAndHold
         let holdSec = AppSettings.shared.holdDuration
