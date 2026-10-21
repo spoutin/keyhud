@@ -244,12 +244,7 @@ struct KeybindingEditorView: View {
                                 let k = item["keys"] ?? ""
                                 let t = item["title"] ?? ""
                                 guard !k.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
-                                let confs = ShortcutConflictDetector.shared.allConflicts(
-                                    for: k,
-                                    currentTitle: t,
-                                    inCategories: state.currentCategories,
-                                    shortcutsProvider: { state.shortcuts(for: $0) }
-                                )
+                                let confs = state.conflicts(category: category, title: t, keys: k)
                                 return confs.isEmpty ? nil : (idx, item)
                             }
 
@@ -454,12 +449,7 @@ struct KeybindingEditorView: View {
                                         }
 
                                         // Conflict Badges
-                                        let conflicts = ShortcutConflictDetector.shared.allConflicts(
-                                            for: currentKeys,
-                                            currentTitle: currentTitle,
-                                            inCategories: state.currentCategories,
-                                            shortcutsProvider: { state.shortcuts(for: $0) }
-                                        )
+                                        let conflicts = state.conflicts(category: category, title: currentTitle, keys: currentKeys)
 
                                         ForEach(Array(conflicts.enumerated()), id: \.offset) { _, conf in
                                             HStack(spacing: 3) {

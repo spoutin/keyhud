@@ -30,6 +30,7 @@ class EditorState: ObservableObject {
     @Published var selectedBundleID: String = "" {
         didSet {
             autoDetectIfEmpty(for: selectedBundleID)
+            recalculateConflicts()
         }
     }
     @Published var newCategoryName: String = ""
@@ -43,6 +44,8 @@ class EditorState: ObservableObject {
     @Published var recordingVariantIndex: Int? = nil
     @Published var recordingSequence: [String] = []
     @Published var liveModifiers: String = ""
+    @Published var cachedConflictSummaries: [ConflictSummaryItem] = []
+    private var cachedConflictsMap: [String: [ConflictSeverity]] = [:]
 
     var isRecording: Bool {
         recordingCategory != nil && recordingIndex != nil
@@ -151,6 +154,7 @@ class EditorState: ObservableObject {
     func undo() {
         guard let prev = undoStack.popLast() else { return }
         config = prev
+        recalculateConflicts()
     }
 
     init() {
@@ -173,6 +177,7 @@ class EditorState: ObservableObject {
         autoDetectIfEmpty(for: self.selectedBundleID)
         self.savedConfig = self.config
         self.undoStack.removeAll()
+        recalculateConflicts()
     }
 
     func autoDetectIfEmpty(for bundleID: String) {
@@ -192,6 +197,7 @@ class EditorState: ObservableObject {
                     appDict[group.title] = group.items.map { ["title": $0.title, "keys": $0.keys] }
                 }
                 config[bundleID] = appDict
+                recalculateConflicts()
             }
         }
     }
@@ -252,8 +258,10 @@ class EditorState: ObservableObject {
         return config[selectedBundleID]?[category] ?? []
     }
 
-    func allConflictSummaries() -> [ConflictSummaryItem] {
+    func recalculateConflicts() {
         var results: [ConflictSummaryItem] = []
+        var map: [String: [ConflictSeverity]] = [:]
+
         for cat in currentCategories {
             let items = shortcuts(for: cat)
             for item in items {
@@ -266,6 +274,8 @@ class EditorState: ObservableObject {
                     inCategories: currentCategories,
                     shortcutsProvider: { self.shortcuts(for: $0) }
                 )
+                let itemKey = "\(cat)::\(title)::\(keys)"
+                map[itemKey] = conflicts
                 if !conflicts.isEmpty {
                     results.append(ConflictSummaryItem(
                         category: cat,
@@ -276,11 +286,20 @@ class EditorState: ObservableObject {
                 }
             }
         }
-        return results
+        self.cachedConflictSummaries = results
+        self.cachedConflictsMap = map
+    }
+
+    func conflicts(category: String, title: String, keys: String) -> [ConflictSeverity] {
+        return cachedConflictsMap["\(category)::\(title)::\(keys)"] ?? []
+    }
+
+    func allConflictSummaries() -> [ConflictSummaryItem] {
+        return cachedConflictSummaries
     }
 
     func totalConflictsCount() -> Int {
-        return allConflictSummaries().count
+        return cachedConflictSummaries.count
     }
 
     func addApp(bundleID: String) {
@@ -305,12 +324,14 @@ class EditorState: ObservableObject {
                 ["title": "New Shortcut", "keys": ""]
             ]
         }
+        recalculateConflicts()
     }
 
     func deleteCategory(name: String) {
         guard !selectedBundleID.isEmpty else { return }
         recordUndo()
         config[selectedBundleID]?.removeValue(forKey: name)
+        recalculateConflicts()
     }
 
     func addShortcut(category: String) {
@@ -323,6 +344,7 @@ class EditorState: ObservableObject {
             config[selectedBundleID]?[category] = []
         }
         config[selectedBundleID]?[category]?.append(["title": "New Shortcut", "keys": ""])
+        recalculateConflicts()
     }
 
     func updateShortcut(category: String, index: Int, title: String, keys: String) {
@@ -333,6 +355,7 @@ class EditorState: ObservableObject {
         recordUndo()
         items[index] = ["title": title, "keys": keys]
         config[selectedBundleID]?[category] = items
+        recalculateConflicts()
     }
 
     func deleteShortcut(category: String, index: Int) {
@@ -342,6 +365,7 @@ class EditorState: ObservableObject {
         recordUndo()
         items.remove(at: index)
         config[selectedBundleID]?[category] = items
+        recalculateConflicts()
     }
 
     func insertModifier(_ mod: String, category: String, index: Int) {
@@ -362,6 +386,7 @@ class EditorState: ObservableObject {
         }
         items[index]["keys"] = keys
         config[selectedBundleID]?[category] = items
+        recalculateConflicts()
     }
 
     func save() {

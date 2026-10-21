@@ -21,7 +21,9 @@ struct SettingsView: View {
             HStack(spacing: 6) {
                 ForEach(SettingsTab.allCases) { tab in
                     Button(action: {
-                        settings.selectedSettingsTab = tab.rawValue
+                        withAnimation(.easeInOut(duration: 0.12)) {
+                            settings.selectedSettingsTab = tab.rawValue
+                        }
                         SettingsWindowController.shared.updateSizeForTab(tab)
                     }) {
                         HStack(spacing: 6) {
@@ -594,8 +596,8 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         let initialTab = SettingsTab(rawValue: AppSettings.shared.selectedSettingsTab) ?? .general
         let initialSize: NSSize
         switch initialTab {
-        case .general: initialSize = NSSize(width: 640, height: 560)
-        case .appearance: initialSize = NSSize(width: 640, height: 580)
+        case .general: initialSize = NSSize(width: 760, height: 600)
+        case .appearance: initialSize = NSSize(width: 760, height: 600)
         case .shortcuts: initialSize = NSSize(width: 880, height: 680)
         }
 
@@ -607,7 +609,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         )
         window.title = "KeyHUD Settings & Keybinding Editor"
         window.collectionBehavior = [.moveToActiveSpace]
-        window.minSize = NSSize(width: 640, height: 500)
+        window.minSize = NSSize(width: 700, height: 500)
         window.center()
         window.isReleasedWhenClosed = false
         super.init(window: window)
@@ -696,18 +698,20 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         let targetSize: NSSize
         switch tab {
         case .general:
-            targetSize = NSSize(width: 640, height: 620)
+            targetSize = NSSize(width: 760, height: 600)
         case .appearance:
-            targetSize = NSSize(width: 640, height: 600)
+            targetSize = NSSize(width: 760, height: 600)
         case .shortcuts:
             targetSize = NSSize(width: 880, height: 680)
         }
 
-        var frame = window.frame
-        let oldHeight = frame.size.height
-        frame.origin.y += (oldHeight - targetSize.height)
-        frame.size = targetSize
-        window.setFrame(frame, display: true, animate: window.isVisible)
+        if abs(window.frame.width - targetSize.width) > 2 || abs(window.frame.height - targetSize.height) > 2 {
+            var frame = window.frame
+            let oldHeight = frame.size.height
+            frame.origin.y += (oldHeight - targetSize.height)
+            frame.size = targetSize
+            window.setFrame(frame, display: true, animate: false)
+        }
     }
 
     func openSettings(selectingTab: SettingsTab = .general, bundleID: String? = nil) {

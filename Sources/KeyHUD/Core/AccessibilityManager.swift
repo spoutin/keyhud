@@ -126,23 +126,35 @@ class PermissionChecker: ObservableObject {
     }
 
     func refresh() {
-        var current = AXIsProcessTrusted()
-        if !current {
-            // Live probe: test whether AX can read any running app
-            let probeApp = NSWorkspace.shared.runningApplications.first(where: {
-                $0.activationPolicy == .regular && $0.bundleIdentifier != Bundle.main.bundleIdentifier
-            })
-            if let probe = probeApp {
-                let axApp = AXUIElementCreateApplication(probe.processIdentifier)
-                var mb: AnyObject?
-                if AXUIElementCopyAttributeValue(axApp, kAXMenuBarAttribute as CFString, &mb) == .success {
-                    current = true
+        if AXIsProcessTrusted() {
+            if !isAccessibilityGranted {
+                DispatchQueue.main.async {
+                    self.isAccessibilityGranted = true
                 }
             }
+            return
         }
-        if isAccessibilityGranted != current {
-            DispatchQueue.main.async {
-                self.isAccessibilityGranted = current
+
+        // Run live IPC probe in background so main thread never hitches
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            var current = AXIsProcessTrusted()
+            if !current {
+                let probeApp = NSWorkspace.shared.runningApplications.first(where: {
+                    $0.activationPolicy == .regular && $0.bundleIdentifier != Bundle.main.bundleIdentifier
+                })
+                if let probe = probeApp {
+                    let axApp = AXUIElementCreateApplication(probe.processIdentifier)
+                    var mb: AnyObject?
+                    if AXUIElementCopyAttributeValue(axApp, kAXMenuBarAttribute as CFString, &mb) == .success {
+                        current = true
+                    }
+                }
+            }
+            if self.isAccessibilityGranted != current {
+                DispatchQueue.main.async {
+                    self.isAccessibilityGranted = current
+                }
             }
         }
     }
