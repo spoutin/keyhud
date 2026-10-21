@@ -721,6 +721,71 @@ class ShortcutConflictDetector {
     }
 }
 
+// MARK: - XDG Base Directory Support
+
+struct XDG {
+    static var homeDirectory: String {
+        FileManager.default.homeDirectoryForCurrentUser.path
+    }
+
+    /// $XDG_CONFIG_HOME, defaulting to ~/.config
+    static var configHome: String {
+        if let env = ProcessInfo.processInfo.environment["XDG_CONFIG_HOME"], !env.trimmingCharacters(in: .whitespaces).isEmpty {
+            return (env as NSString).expandingTildeInPath
+        }
+        return "\(homeDirectory)/.config"
+    }
+
+    /// $XDG_DATA_HOME, defaulting to ~/.local/share
+    static var dataHome: String {
+        if let env = ProcessInfo.processInfo.environment["XDG_DATA_HOME"], !env.trimmingCharacters(in: .whitespaces).isEmpty {
+            return (env as NSString).expandingTildeInPath
+        }
+        return "\(homeDirectory)/.local/share"
+    }
+
+    /// $XDG_STATE_HOME, defaulting to ~/.local/state
+    static var stateHome: String {
+        if let env = ProcessInfo.processInfo.environment["XDG_STATE_HOME"], !env.trimmingCharacters(in: .whitespaces).isEmpty {
+            return (env as NSString).expandingTildeInPath
+        }
+        return "\(homeDirectory)/.local/state"
+    }
+
+    /// $XDG_CACHE_HOME, defaulting to ~/.cache
+    static var cacheHome: String {
+        if let env = ProcessInfo.processInfo.environment["XDG_CACHE_HOME"], !env.trimmingCharacters(in: .whitespaces).isEmpty {
+            return (env as NSString).expandingTildeInPath
+        }
+        return "\(homeDirectory)/.cache"
+    }
+
+    // KeyHUD Specific Locations
+    static var keyhudConfigDir: String { "\(configHome)/keyhud" }
+    static var keyhudConfigFile: String { "\(keyhudConfigDir)/custom_shortcuts.json" }
+    static var keyhudDataDir: String { "\(dataHome)/keyhud" }
+    static var keyhudStateDir: String { "\(stateHome)/keyhud" }
+
+    // External Discovered Tool Configs
+    static var aerospaceConfigPath: String {
+        let xdgPath = "\(configHome)/aerospace/aerospace.toml"
+        if FileManager.default.fileExists(atPath: xdgPath) {
+            return xdgPath
+        }
+        let legacyPath = "\(homeDirectory)/.aerospace.toml"
+        if FileManager.default.fileExists(atPath: legacyPath) {
+            return legacyPath
+        }
+        return xdgPath
+    }
+
+    static var herdrConfigPath: String { "\(configHome)/herdr/config.toml" }
+    static var nvimKeymapsPath: String { "\(configHome)/nvim/lua/config/keymaps.lua" }
+    static var k9sConfigDir: String { "\(configHome)/k9s" }
+    static var lazygitConfigDir: String { "\(configHome)/lazygit" }
+    static var atuinConfigDir: String { "\(configHome)/atuin" }
+}
+
 // MARK: - Custom Shortcuts Manager & Importer
 
 class CustomShortcutsManager {
@@ -737,8 +802,7 @@ class CustomShortcutsManager {
     ]
 
     init() {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        configPath = "\(home)/.config/keyhud/custom_shortcuts.json"
+        configPath = XDG.keyhudConfigFile
     }
 
     func loadConfig() -> [String: [String: [[String: String]]]] {
@@ -863,12 +927,11 @@ class CustomShortcutsManager {
     }
 
     func autoDetectLocalConfigs() -> Int {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
         var detectedCount = 0
         var ghosttyConfig = loadConfig()["com.mitchellh.ghostty"] ?? [:]
 
         // 1. Scan Herdr config
-        let herdrConfigPath = "\(home)/.config/herdr/config.toml"
+        let herdrConfigPath = XDG.herdrConfigPath
         if let herdrContent = try? String(contentsOfFile: herdrConfigPath, encoding: .utf8) {
             var herdrItems: [[String: String]] = [
                 ["title": "Ghostty Command Palette", "keys": "⇧⌘P"]
@@ -915,7 +978,7 @@ class CustomShortcutsManager {
         detectedCount += zshItems.count
 
         // 3. Scan Neovim Custom Keymaps
-        let nvimKeymapsPath = "\(home)/.config/nvim/lua/config/keymaps.lua"
+        let nvimKeymapsPath = XDG.nvimKeymapsPath
         var customWindowItems: [[String: String]] = [
             ["title": "Focus Left Window / Split", "keys": "⌃h"],
             ["title": "Focus Down Window / Split", "keys": "⌃j"],
@@ -942,7 +1005,7 @@ class CustomShortcutsManager {
         detectedCount += customWindowItems.count
 
         // 4. K9s, Lazygit, Atuin, VisiData TUI detection
-        let k9sConfigPath = "\(home)/.config/k9s"
+        let k9sConfigPath = XDG.k9sConfigDir
         if FileManager.default.fileExists(atPath: k9sConfigPath) && ghosttyConfig["K9s: Kubernetes"] == nil {
             ghosttyConfig["K9s: Kubernetes"] = [
                 ["title": "Pods View", "keys": ":pods"],
@@ -962,7 +1025,7 @@ class CustomShortcutsManager {
             detectedCount += 13
         }
 
-        let lazygitConfigPath = "\(home)/.config/lazygit"
+        let lazygitConfigPath = XDG.lazygitConfigDir
         if FileManager.default.fileExists(atPath: lazygitConfigPath) && ghosttyConfig["Lazygit: Git TUI"] == nil {
             ghosttyConfig["Lazygit: Git TUI"] = [
                 ["title": "Status Panel", "keys": "1"],
@@ -982,7 +1045,7 @@ class CustomShortcutsManager {
             detectedCount += 13
         }
 
-        let atuinConfigPath = "\(home)/.config/atuin"
+        let atuinConfigPath = XDG.atuinConfigDir
         if FileManager.default.fileExists(atPath: atuinConfigPath) && ghosttyConfig["Atuin: Shell History"] == nil {
             ghosttyConfig["Atuin: Shell History"] = [
                 ["title": "Interactive History Search", "keys": "⌃R"],
@@ -1025,8 +1088,7 @@ class CustomShortcutsManager {
 
 struct AeroSpaceConfigParser {
     static func defaultPath() -> String {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        return "\(home)/.config/aerospace/aerospace.toml"
+        return XDG.aerospaceConfigPath
     }
 
     static func parse(atPath path: String = defaultPath()) -> [ShortcutGroup] {
@@ -1782,19 +1844,31 @@ struct MarkdownExporter {
         pasteboard.setString(md, forType: .string)
     }
 
-    static func saveToFile(appName: String, groups: [ShortcutGroup]) -> URL? {
+    enum ExportDestination {
+        case documents
+        case xdgData
+    }
+
+    static func saveToFile(appName: String, groups: [ShortcutGroup], destination: ExportDestination = .documents) -> URL? {
         let md = generateMarkdown(appName: appName, groups: groups)
         let fileManager = FileManager.default
-        let docsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
-        let keyhudDir = docsURL.appendingPathComponent("KeyHUD", isDirectory: true)
+        let targetDir: URL
 
-        try? fileManager.createDirectory(at: keyhudDir, withIntermediateDirectories: true)
+        switch destination {
+        case .documents:
+            let docsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
+            targetDir = docsURL.appendingPathComponent("KeyHUD", isDirectory: true)
+        case .xdgData:
+            targetDir = URL(fileURLWithPath: XDG.keyhudDataDir, isDirectory: true).appendingPathComponent("cheatsheets", isDirectory: true)
+        }
+
+        try? fileManager.createDirectory(at: targetDir, withIntermediateDirectories: true)
 
         let safeName = appName
             .replacingOccurrences(of: "/", with: "-")
             .replacingOccurrences(of: ":", with: "-")
             .replacingOccurrences(of: " ", with: "_")
-        let fileURL = keyhudDir.appendingPathComponent("\(safeName)-shortcuts.md")
+        let fileURL = targetDir.appendingPathComponent("\(safeName)-shortcuts.md")
 
         do {
             try md.write(to: fileURL, atomically: true, encoding: .utf8)
@@ -2960,7 +3034,10 @@ struct HUDView: View {
                         MarkdownExporter.copyToClipboard(appName: appName, groups: currentScopeGroups)
                     })
                     menu.addItem(BlockMenuItem(title: "Save to Documents (KeyHUD)", iconName: "folder") {
-                        _ = MarkdownExporter.saveToFile(appName: appName, groups: currentScopeGroups)
+                        _ = MarkdownExporter.saveToFile(appName: appName, groups: currentScopeGroups, destination: .documents)
+                    })
+                    menu.addItem(BlockMenuItem(title: "Save to XDG Data (\(XDG.dataHome)/keyhud)", iconName: "shippingbox") {
+                        _ = MarkdownExporter.saveToFile(appName: appName, groups: currentScopeGroups, destination: .xdgData)
                     })
                     menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
                 }) {
@@ -3770,7 +3847,10 @@ struct KeybindingEditorView: View {
                             MarkdownExporter.copyToClipboard(appName: appTitle, groups: groups)
                         })
                         menu.addItem(BlockMenuItem(title: "Save to Documents (KeyHUD)", iconName: "folder") {
-                            _ = MarkdownExporter.saveToFile(appName: appTitle, groups: groups)
+                            _ = MarkdownExporter.saveToFile(appName: appTitle, groups: groups, destination: .documents)
+                        })
+                        menu.addItem(BlockMenuItem(title: "Save to XDG Data (\(XDG.dataHome)/keyhud)", iconName: "shippingbox") {
+                            _ = MarkdownExporter.saveToFile(appName: appTitle, groups: groups, destination: .xdgData)
                         })
                         menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
                     }) {
@@ -4431,7 +4511,7 @@ struct SettingsView: View {
             // Footer Actions
             HStack {
                 if selectedTab == .shortcuts {
-                    Text("Edits persist to ~/.config/keyhud/custom_shortcuts.json")
+                    Text("Edits persist to \(XDG.keyhudConfigFile)")
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
                 } else {
@@ -5360,8 +5440,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc func openConfig() {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let url = URL(fileURLWithPath: "\(home)/.config/keyhud/custom_shortcuts.json")
+        let url = URL(fileURLWithPath: XDG.keyhudConfigFile)
         NSWorkspace.shared.open(url)
     }
 
