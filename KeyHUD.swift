@@ -2418,7 +2418,8 @@ struct HUDView: View {
             }
             return groups
         case .ghosttyTool(let catName):
-            return groups.filter { $0.title == catName }
+            let ghosttyGroups = (bundleID == "com.mitchellh.ghostty") ? groups : (CustomShortcutsManager.shared.groups(for: "com.mitchellh.ghostty") ?? [])
+            return ghosttyGroups.filter { $0.title == catName }
         case .runningApp(let bID, _, _):
             // Load custom shortcuts or scanned menus for this running app
             var appGroups = CustomShortcutsManager.shared.groups(for: bID) ?? []
@@ -2429,6 +2430,9 @@ struct HUDView: View {
                         appGroups.append(sc)
                     }
                 }
+            }
+            if bID == "com.mitchellh.ghostty" {
+                return appGroups.filter { settings.isGhosttyCategoryShownOnMain($0.title) }
             }
             return appGroups
         case .aerospace:
@@ -2687,16 +2691,20 @@ struct HUDView: View {
                                 }
                             }
 
-                            // Ghostty TUI Sub-profiles
-                            if bundleID == "com.mitchellh.ghostty" {
-                                Menu("Terminal Tools") {
-                                    ForEach(groups) { grp in
-                                        Button(action: {
-                                            searchState.navigateToScope(.ghosttyTool(category: grp.title))
-                                        }) {
-                                            HStack {
-                                                Image(systemName: "chevron.left.forwardslash.chevron.right")
-                                                Text(grp.title)
+                            // Ghostty TUI Sub-profiles (active context or navigated Ghostty context)
+                            let isViewingGhostty = (bundleID == "com.mitchellh.ghostty") || (currentScopeBundleID == "com.mitchellh.ghostty")
+                            if isViewingGhostty {
+                                let ghosttyGroups = (bundleID == "com.mitchellh.ghostty") ? groups : (CustomShortcutsManager.shared.groups(for: "com.mitchellh.ghostty") ?? [])
+                                if !ghosttyGroups.isEmpty {
+                                    Menu("Terminal Tools") {
+                                        ForEach(ghosttyGroups) { grp in
+                                            Button(action: {
+                                                searchState.navigateToScope(.ghosttyTool(category: grp.title))
+                                            }) {
+                                                HStack {
+                                                    Image(systemName: "chevron.left.forwardslash.chevron.right")
+                                                    Text(grp.title)
+                                                }
                                             }
                                         }
                                     }
@@ -2731,12 +2739,46 @@ struct HUDView: View {
                         if !otherApps.isEmpty {
                             Section("OTHER RUNNING APPS") {
                                 ForEach(otherApps) { app in
-                                    Button(action: {
-                                        searchState.navigateToScope(.runningApp(bundleID: app.bundleIdentifier, name: app.localizedName, icon: app.icon))
-                                    }) {
-                                        HStack {
-                                            Image(nsImage: app.icon)
-                                            Text(app.localizedName)
+                                    if app.bundleIdentifier == "com.mitchellh.ghostty" {
+                                        Menu {
+                                            Button(action: {
+                                                searchState.navigateToScope(.runningApp(bundleID: app.bundleIdentifier, name: app.localizedName, icon: app.icon))
+                                            }) {
+                                                HStack {
+                                                    Image(nsImage: app.icon)
+                                                    Text("Ghostty (Main)")
+                                                }
+                                            }
+
+                                            let ghosttyGroups = CustomShortcutsManager.shared.groups(for: "com.mitchellh.ghostty") ?? []
+                                            if !ghosttyGroups.isEmpty {
+                                                Menu("Terminal Tools") {
+                                                    ForEach(ghosttyGroups) { grp in
+                                                        Button(action: {
+                                                            searchState.navigateToScope(.ghosttyTool(category: grp.title))
+                                                        }) {
+                                                            HStack {
+                                                                Image(systemName: "chevron.left.forwardslash.chevron.right")
+                                                                Text(grp.title)
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        } label: {
+                                            HStack {
+                                                Image(nsImage: app.icon)
+                                                Text(app.localizedName)
+                                            }
+                                        }
+                                    } else {
+                                        Button(action: {
+                                            searchState.navigateToScope(.runningApp(bundleID: app.bundleIdentifier, name: app.localizedName, icon: app.icon))
+                                        }) {
+                                            HStack {
+                                                Image(nsImage: app.icon)
+                                                Text(app.localizedName)
+                                            }
                                         }
                                     }
                                 }
