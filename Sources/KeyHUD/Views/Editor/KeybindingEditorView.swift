@@ -131,44 +131,43 @@ struct KeybindingEditorView: View {
 
             Divider()
 
-            // Conflict Summary Banner
-            ConflictSummaryBannerView(state: state, accent: accent)
-
-            // Embedded Interactive Keyboard Heatmap
-            EmbeddedKeyboardHeatmapView(state: state, accent: accent)
-
-            // Inline App Adder Banner
-            if state.isAddingApp {
-                HStack(spacing: 10) {
-                    Text("New Bundle ID:")
-                        .font(.system(size: 12, weight: .semibold))
-                    TextField("e.g. com.apple.Safari or global", text: $state.newAppBundleID)
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                        .frame(width: 250)
-
-                    Button("Add App") {
-                        if !state.newAppBundleID.isEmpty {
-                            state.addApp(bundleID: state.newAppBundleID)
-                            state.newAppBundleID = ""
-                            state.isAddingApp = false
-                        }
-                    }
-                    Button("Cancel") {
-                        state.newAppBundleID = ""
-                        state.isAddingApp = false
-                    }
-                    Spacer()
-                }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 8)
-                .background(accent.opacity(0.12))
-
-                Divider()
-            }
-
-            // Categories & Shortcuts Scroll View
+            // Main Scrollable Area: Conflict Banner, Keyboard Heatmap, Categories & Shortcuts
             ScrollView(.vertical, showsIndicators: true) {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 14) {
+                    // Conflict Summary Banner
+                    ConflictSummaryBannerView(state: state, accent: accent)
+
+                    // Embedded Interactive Keyboard Heatmap
+                    EmbeddedKeyboardHeatmapView(state: state, accent: accent)
+
+                    // Inline App Adder Banner
+                    if state.isAddingApp {
+                        HStack(spacing: 10) {
+                            Text("New Bundle ID:")
+                                .font(.system(size: 12, weight: .semibold))
+                            TextField("e.g. com.apple.Safari or global", text: $state.newAppBundleID)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .frame(width: 250)
+
+                            Button("Add App") {
+                                if !state.newAppBundleID.isEmpty {
+                                    state.addApp(bundleID: state.newAppBundleID)
+                                    state.newAppBundleID = ""
+                                    state.isAddingApp = false
+                                }
+                            }
+                            Button("Cancel") {
+                                state.newAppBundleID = ""
+                                state.isAddingApp = false
+                            }
+                            Spacer()
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 8)
+                        .background(accent.opacity(0.12))
+                        .cornerRadius(6)
+                    }
+
                     // Category adder banner
                     HStack {
                         if state.isAddingCategory {

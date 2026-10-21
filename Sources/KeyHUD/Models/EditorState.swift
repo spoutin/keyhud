@@ -279,7 +279,9 @@ class EditorState: ObservableObject {
                 let conflicts = ShortcutConflictDetector.shared.allConflicts(
                     for: keys,
                     currentTitle: title,
+                    currentCategory: cat,
                     inCategories: currentCategories,
+                    bundleID: selectedBundleID,
                     shortcutsProvider: { self.shortcuts(for: $0) }
                 )
                 let itemKey = "\(cat)::\(title)::\(keys)"

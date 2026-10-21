@@ -159,6 +159,57 @@ struct ConflictSummaryItem: Identifiable {
     let conflicts: [ConflictSeverity]
 }
 
+// MARK: - Tool & Terminal Domain Isolation Helper
+
+struct ToolDomainHelper {
+    static func toolDomain(for category: String) -> String {
+        let clean = category.trimmingCharacters(in: .whitespaces)
+        // If category has a prefix before a colon, e.g. "Neovim: Edits & Leader" -> "neovim"
+        if let colonIdx = clean.firstIndex(of: ":") {
+            let prefix = String(clean[..<colonIdx]).trimmingCharacters(in: .whitespaces)
+            return prefix.lowercased()
+        }
+        return clean.lowercased()
+    }
+
+    static func areCategoriesInSameDomain(catA: String, catB: String, bundleID: String) -> Bool {
+        if catA == catB { return true }
+
+        let isTerminal = bundleID.lowercased().contains("ghostty") ||
+                         bundleID.lowercased().contains("terminal") ||
+                         bundleID.lowercased().contains("iterm") ||
+                         bundleID.lowercased().contains("alacritty") ||
+                         bundleID.lowercased().contains("kitty") ||
+                         bundleID.lowercased().contains("wezterm")
+
+        // For standard macOS GUI apps, all categories exist simultaneously
+        if !isTerminal {
+            return true
+        }
+
+        // For terminal emulators, distinct TUIs and shells run in mutually exclusive contexts
+        let domainA = toolDomain(for: catA)
+        let domainB = toolDomain(for: catB)
+        return domainA == domainB
+    }
+
+    static func areBindingsInConflict(a: MappedKeybinding, b: MappedKeybinding, bundleID: String) -> Bool {
+        if a.id == b.id { return false }
+
+        // Global collisions (AeroSpace / macOS) intercept everywhere
+        if a.appScope == "AeroSpace" || b.appScope == "AeroSpace" ||
+           a.appScope == "macOS" || b.appScope == "macOS" {
+            return true
+        }
+
+        if a.appScope != b.appScope {
+            return false
+        }
+
+        return areCategoriesInSameDomain(catA: a.category, catB: b.category, bundleID: bundleID)
+    }
+}
+
 class ShortcutConflictDetector {
     static let shared = ShortcutConflictDetector()
 
@@ -212,15 +263,27 @@ class ShortcutConflictDetector {
         return nil
     }
 
-    func checkInternalConflict(keys: String, currentTitle: String, inCategories categories: [String], shortcutsProvider: (String) -> [[String: String]]) -> ConflictSeverity? {
+    func checkInternalConflict(
+        keys: String,
+        currentTitle: String,
+        currentCategory: String = "",
+        inCategories categories: [String],
+        bundleID: String = "",
+        shortcutsProvider: (String) -> [[String: String]]
+    ) -> ConflictSeverity? {
         let currentVariants = ShortcutNormalizer.variants(keys).map { ShortcutNormalizer.canonical($0) }
         guard !currentVariants.isEmpty else { return nil }
 
         for cat in categories {
+            // Skip categories that are in different execution domains (e.g. zsh-vi-mode vs a TUI in Ghostty)
+            if !currentCategory.isEmpty && !ToolDomainHelper.areCategoriesInSameDomain(catA: currentCategory, catB: cat, bundleID: bundleID) {
+                continue
+            }
+
             let items = shortcutsProvider(cat)
             for other in items {
                 let otherTitle = other["title"] ?? ""
-                if otherTitle == currentTitle { continue }
+                if otherTitle == currentTitle && cat == currentCategory { continue }
                 let otherKeys = other["keys"] ?? ""
                 let otherVariants = ShortcutNormalizer.variants(otherKeys).map { ShortcutNormalizer.canonical($0) }
 
@@ -234,9 +297,23 @@ class ShortcutConflictDetector {
         return nil
     }
 
-    func allConflicts(for keys: String, currentTitle: String, inCategories categories: [String], shortcutsProvider: (String) -> [[String: String]]) -> [ConflictSeverity] {
+    func allConflicts(
+        for keys: String,
+        currentTitle: String,
+        currentCategory: String = "",
+        inCategories categories: [String],
+        bundleID: String = "",
+        shortcutsProvider: (String) -> [[String: String]]
+    ) -> [ConflictSeverity] {
         var results: [ConflictSeverity] = []
-        if let internalConf = checkInternalConflict(keys: keys, currentTitle: currentTitle, inCategories: categories, shortcutsProvider: shortcutsProvider) {
+        if let internalConf = checkInternalConflict(
+            keys: keys,
+            currentTitle: currentTitle,
+            currentCategory: currentCategory,
+            inCategories: categories,
+            bundleID: bundleID,
+            shortcutsProvider: shortcutsProvider
+        ) {
             results.append(internalConf)
         }
         if let globalConf = checkGlobalConflict(keys: keys) {

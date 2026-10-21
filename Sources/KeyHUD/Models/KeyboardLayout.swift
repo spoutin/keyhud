@@ -248,7 +248,24 @@ struct KeyboardLayout {
         } else if matched.count == 1, let single = matched.first {
             return .assigned(binding: single)
         } else {
-            return .conflict(bindings: matched)
+            // Check if any pair in matched has a real conflict (ignoring mutually exclusive terminal tools)
+            var realConflicts: [MappedKeybinding] = []
+            for i in 0..<matched.count {
+                for j in (i+1)..<matched.count {
+                    let a = matched[i]
+                    let b = matched[j]
+                    if ToolDomainHelper.areBindingsInConflict(a: a, b: b, bundleID: "com.mitchellh.ghostty") {
+                        if !realConflicts.contains(where: { $0.id == a.id }) { realConflicts.append(a) }
+                        if !realConflicts.contains(where: { $0.id == b.id }) { realConflicts.append(b) }
+                    }
+                }
+            }
+
+            if !realConflicts.isEmpty {
+                return .conflict(bindings: realConflicts)
+            } else {
+                return .assigned(binding: matched.first!)
+            }
         }
     }
 
