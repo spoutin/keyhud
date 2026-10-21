@@ -57,6 +57,8 @@ struct SettingsView: View {
                     appearanceTabView
                 case .shortcuts:
                     shortcutsEditorTabView
+                case .about:
+                    aboutTabView
                 }
             }
             .frame(maxHeight: .infinity)
@@ -67,6 +69,10 @@ struct SettingsView: View {
             HStack {
                 if selectedTab == .shortcuts {
                     Text("Edits persist to \(XDG.keyhudConfigFile)")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                } else if selectedTab == .about {
+                    Text("KeyHUD v\(AppInfo.version) • \(AppInfo.license)")
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
                 } else {
@@ -580,6 +586,203 @@ struct SettingsView: View {
             KeybindingEditorView(state: editorState) {
                 // In-tab dismiss handler
             }
+        }
+    }
+
+    // MARK: - About Tab View
+    private var aboutTabView: some View {
+        ScrollView(.vertical, showsIndicators: true) {
+            VStack(alignment: .leading, spacing: 18) {
+                // Hero Header Card
+                HStack(spacing: 16) {
+                    Image(systemName: "command.circle.fill")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 52, height: 52)
+                        .foregroundColor(settings.currentAccentColor)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text("KeyHUD")
+                                .font(.system(size: 20, weight: .bold))
+                                .foregroundColor(.primary)
+
+                            Text("v\(AppInfo.version)")
+                                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                                .foregroundColor(settings.currentAccentColor)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(settings.currentAccentColor.opacity(0.14))
+                                .cornerRadius(5)
+
+                            Text(AppInfo.channelName)
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(AppInfo.isBeta ? .orange : .green)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background((AppInfo.isBeta ? Color.orange : Color.green).opacity(0.14))
+                                .cornerRadius(5)
+                        }
+
+                        Text("Instant floating shortcut cheatsheet & hotkey HUD for macOS, Ghostty, and CLI/TUI tools.")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                            .lineLimit(2)
+                    }
+                    Spacer()
+                }
+                .padding(16)
+                .background(Color(NSColor.controlBackgroundColor))
+                .cornerRadius(10)
+
+                // Publisher & Open Source Card
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("PUBLISHER & PROJECT")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.secondary)
+
+                    HStack(spacing: 32) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Publisher / Author")
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                            Text(AppInfo.publisher)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(.primary)
+                        }
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("License")
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                            Text(AppInfo.license)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(.primary)
+                        }
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Distribution Channel")
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                            Text("Homebrew Tap")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(.primary)
+                        }
+
+                        Spacer()
+                    }
+
+                    Divider()
+
+                    HStack(spacing: 12) {
+                        Button(action: { NSWorkspace.shared.open(AppInfo.githubURL) }) {
+                            HStack(spacing: 5) {
+                                Image(systemName: "globe")
+                                Text("GitHub Repository")
+                            }
+                        }
+
+                        Button(action: { NSWorkspace.shared.open(AppInfo.issuesURL) }) {
+                            HStack(spacing: 5) {
+                                Image(systemName: "ladybug")
+                                Text("Report Bug / Feedback")
+                            }
+                        }
+
+                        Button(action: { NSWorkspace.shared.open(AppInfo.tapURL) }) {
+                            HStack(spacing: 5) {
+                                Image(systemName: "shippingbox")
+                                Text("Homebrew Tap")
+                            }
+                        }
+                    }
+                }
+                .padding(14)
+                .background(Color(NSColor.controlBackgroundColor))
+                .cornerRadius(8)
+
+                // System & XDG Diagnostics Card
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("ENVIRONMENT & STORAGE DIAGNOSTICS")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.secondary)
+
+                    VStack(spacing: 10) {
+                        HStack {
+                            Text("Configuration File ($XDG_CONFIG_HOME):")
+                                .font(.system(size: 12))
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Text(XDG.keyhudConfigFile)
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundColor(.primary)
+                            Button("Reveal") {
+                                AppDelegate.shared?.openConfig()
+                            }
+                            .font(.system(size: 11))
+                        }
+
+                        HStack {
+                            Text("Cheatsheets Export ($XDG_DATA_HOME):")
+                                .font(.system(size: 12))
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Text("\(XDG.keyhudDataDir)/cheatsheets")
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundColor(.primary)
+                        }
+
+                        HStack {
+                            Text("Platform & Architecture:")
+                                .font(.system(size: 12))
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Text("macOS \(ProcessInfo.processInfo.operatingSystemVersionString) (arm64)")
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundColor(.primary)
+                        }
+                    }
+                }
+                .padding(14)
+                .background(Color(NSColor.controlBackgroundColor))
+                .cornerRadius(8)
+
+                // Homebrew Updates Card
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("UPDATES VIA HOMEBREW")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.secondary)
+
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("To upgrade KeyHUD to future versions at any time:")
+                                .font(.system(size: 12))
+                                .foregroundColor(.secondary)
+
+                            Text("brew upgrade \(AppInfo.isBeta ? "keyhud@beta" : "keyhud")")
+                                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                                .foregroundColor(settings.currentAccentColor)
+                        }
+
+                        Spacer()
+
+                        Button(action: {
+                            let pb = NSPasteboard.general
+                            pb.clearContents()
+                            pb.setString("brew upgrade \(AppInfo.isBeta ? "keyhud@beta" : "keyhud")", forType: .string)
+                        }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "doc.on.doc")
+                                Text("Copy Command")
+                            }
+                        }
+                    }
+                }
+                .padding(14)
+                .background(Color(NSColor.controlBackgroundColor))
+                .cornerRadius(8)
+            }
+            .padding(18)
         }
     }
 }

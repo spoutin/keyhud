@@ -18,6 +18,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let menu = NSMenu()
         menu.delegate = self
 
+        // Header Version Pill
+        let versionItem = NSMenuItem(title: "KeyHUD v\(AppInfo.version) (\(AppInfo.channelName))", action: nil, keyEquivalent: "")
+        versionItem.isEnabled = false
+        menu.addItem(versionItem)
+        menu.addItem(NSMenuItem.separator())
+
         let toggleItem = NSMenuItem(title: "Toggle KeyHUD", action: #selector(toggleHUD), keyEquivalent: "?")
         toggleItem.keyEquivalentModifierMask = [.command, .shift]
         self.toggleMenuItem = toggleItem
@@ -32,6 +38,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(NSMenuItem(title: "Auto-Detect from Local Configs", action: #selector(autoDetectAction), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Open Shortcuts JSON...", action: #selector(openConfig), keyEquivalent: ""))
         menu.addItem(NSMenuItem.separator())
+        menu.addItem(NSMenuItem(title: "About KeyHUD...", action: #selector(openAbout), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Quit KeyHUD", action: #selector(quitApp), keyEquivalent: "q"))
 
         statusItem?.menu = menu
@@ -110,6 +117,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         alert.informativeText = "Successfully auto-detected and synced \(count) shortcuts from your local Herdr, Zsh, and Neovim configurations!"
         alert.alertStyle = .informational
         alert.runModal()
+    }
+
+    @objc func openAbout() {
+        SettingsWindowController.shared.openSettings(selectingTab: .about)
     }
 
     @objc func openConfig() {

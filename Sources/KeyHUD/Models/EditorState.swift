@@ -7,6 +7,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     case general = "General"
     case appearance = "Appearance"
     case shortcuts = "Shortcuts & Editor"
+    case about = "About"
 
     var id: String { rawValue }
 
@@ -15,6 +16,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .general: return "gearshape"
         case .appearance: return "paintbrush"
         case .shortcuts: return "keyboard"
+        case .about: return "info.circle"
         }
     }
 }
