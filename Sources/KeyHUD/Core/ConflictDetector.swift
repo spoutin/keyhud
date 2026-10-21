@@ -79,6 +79,7 @@ struct ShortcutNormalizer {
 
         var modifiers: [Character] = []
         var keys: [Character] = []
+        let hasCmd = str.contains("⌘")
 
         for ch in str {
             if modifierOrder.contains(ch) {
@@ -86,6 +87,12 @@ struct ShortcutNormalizer {
                     modifiers.append(ch)
                 }
             } else if ch != " " {
+                // If there's no Cmd modifier, an uppercase ASCII letter represents Shift+letter
+                if !hasCmd && ch.isASCII && ch.isUppercase && ch.isLetter {
+                    if !modifiers.contains("⇧") {
+                        modifiers.append("⇧")
+                    }
+                }
                 keys.append(Character(ch.lowercased()))
             }
         }

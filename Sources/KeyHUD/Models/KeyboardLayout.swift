@@ -177,8 +177,9 @@ struct KeyboardLayout {
     static func parseKeyCombo(_ raw: String) -> (modifiers: NSEvent.ModifierFlags, baseKey: String) {
         let str = raw.trimmingCharacters(in: .whitespaces)
         var flags: NSEvent.ModifierFlags = []
+        let hasCmd = str.contains("⌘") || str.lowercased().contains("cmd+")
 
-        if str.contains("⌘") || str.lowercased().contains("cmd+") {
+        if hasCmd {
             flags.insert(.command)
         }
         if str.contains("⇧") || str.lowercased().contains("shift+") {
@@ -203,9 +204,13 @@ struct KeyboardLayout {
             .replacingOccurrences(of: "alt+", with: "", options: .caseInsensitive)
             .replacingOccurrences(of: "ctrl+", with: "", options: .caseInsensitive)
             .trimmingCharacters(in: .whitespaces)
-            .lowercased()
 
-        return (flags, clean)
+        // If there's no Command modifier and clean has a single uppercase ASCII letter, it implies Shift
+        if !hasCmd && clean.count == 1, let firstChar = clean.first, firstChar.isASCII && firstChar.isUppercase && firstChar.isLetter {
+            flags.insert(.shift)
+        }
+
+        return (flags, clean.lowercased())
     }
 
     // MARK: - Key Evaluation & Heatmap Computation
