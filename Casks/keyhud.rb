@@ -1,6 +1,6 @@
 cask "keyhud" do
   version "1.0.0"
-  sha256 "REPLACE_WITH_SHA256"
+  sha256 "1153d4d6e2574443cc5b98bb992e9f893abe592e22fb2aee7e438606856e3577"
 
   url "https://github.com/spoutin/keyhud/releases/download/v#{version}/KeyHUD-#{version}.dmg"
   name "KeyHUD"
