@@ -57,6 +57,8 @@ struct SettingsView: View {
                     appearanceTabView
                 case .shortcuts:
                     shortcutsEditorTabView
+                case .keyboardMap:
+                    KeyboardHeatmapView()
                 case .about:
                     aboutTabView
                 }
@@ -69,6 +71,10 @@ struct SettingsView: View {
             HStack {
                 if selectedTab == .shortcuts {
                     Text("Edits persist to \(XDG.keyhudConfigFile)")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                } else if selectedTab == .keyboardMap {
+                    Text("Interactive ANSI Physical Keyboard Heatmap")
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
                 } else if selectedTab == .about {

@@ -176,6 +176,10 @@
   - [ ] Dedicated Gestures tab or scope in HUD header (3-finger drag, Space switching, Smart Zoom, Mission Control, Force Click).
   - [ ] Visual SF Symbol icons for finger gestures and motion directions.
 
-- [ ] **Interactive Keyboard Layout / Modifier Heatmap (KeyCue-style)**
-  - [ ] Mini visual keyboard layout view showing which physical keys are occupied or free for the active modifier combination.
-  - [ ] Useful for discovering available keys when authoring custom shortcuts.
+- [x] **Interactive Keyboard Layout / Modifier Heatmap (KeyCue-style)**
+  - [x] Authentic 75% Apple ANSI physical keyboard layout with accurate keycap proportions and beveled 3D styling.
+  - [x] Real-time modifier combination toggles (`⌘`, `⌥`, `⌃`, `⇧`) lighting up occupied keymaps.
+  - [x] Scope filtering across Active App, Ghostty, AeroSpace, macOS System, and All combined scopes.
+  - [x] High-visibility conflict and collision highlighting with collision count badge.
+  - [x] Interactive Keycap Inspector displaying command details, categories, and conflicting shortcuts on click.
+  - [x] Direct access via Settings tab, system tray status menu, and floating HUD header toolbar.

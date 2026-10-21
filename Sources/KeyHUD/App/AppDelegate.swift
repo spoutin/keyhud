@@ -32,6 +32,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ","))
+        menu.addItem(NSMenuItem(title: "Keyboard Heatmap...", action: #selector(openKeyboardHeatmap), keyEquivalent: "m"))
         menu.addItem(NSMenuItem(title: "Edit Keybindings...", action: #selector(openKeybindingEditor), keyEquivalent: "k"))
         menu.addItem(NSMenuItem(title: "Relaunch KeyHUD", action: #selector(relaunchApp), keyEquivalent: "r"))
         menu.addItem(NSMenuItem(title: "Import Shortcuts File... (.json / .keyclu)", action: #selector(importFileAction), keyEquivalent: "o"))
@@ -117,6 +118,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         alert.informativeText = "Successfully auto-detected and synced \(count) shortcuts from your local Herdr, Zsh, and Neovim configurations!"
         alert.alertStyle = .informational
         alert.runModal()
+    }
+
+    @objc func openKeyboardHeatmap() {
+        SettingsWindowController.shared.openSettings(selectingTab: .keyboardMap)
     }
 
     @objc func openAbout() {

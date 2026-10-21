@@ -621,6 +621,19 @@ struct HUDView: View {
                 .buttonStyle(PlainButtonStyle())
                 .help("Export Cheatsheet: Copy formatted Markdown to clipboard or save to Documents folder")
 
+                // Keyboard Heatmap Button
+                Button(action: {
+                    HUDWindowController.shared.hide()
+                    SettingsWindowController.shared.openSettings(selectingTab: .keyboardMap)
+                }) {
+                    Image(systemName: "keyboard")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.gray)
+                        .padding(4)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help("Keyboard Heatmap: Visual ANSI keyboard layout and modifier conflict inspector")
+
                 // Edit Shortcuts Button
                 Button(action: {
                     HUDWindowController.shared.hide()
