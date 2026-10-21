@@ -7,9 +7,32 @@ struct AeroSpaceConfigParser {
         return XDG.aerospaceConfigPath
     }
 
-    static func parse(atPath path: String = defaultPath()) -> [ShortcutGroup] {
+    static func parse(atPath path: String = defaultPath(), onlyMainMode: Bool = false) -> [ShortcutGroup] {
         guard let content = try? String(contentsOfFile: path, encoding: .utf8) else {
             return []
+        }
+
+        let lines = content.components(separatedBy: .newlines)
+
+        // Pass 1: Discover modal leaders (e.g. alt-shift-semicolon = 'mode service')
+        var modeLeaders: [String: String] = [:]
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty || trimmed.starts(with: "#") { continue }
+            if trimmed.contains("=") && trimmed.contains("mode ") {
+                let parts = trimmed.split(separator: "=", maxSplits: 1).map { String($0).trimmingCharacters(in: .whitespaces) }
+                if parts.count == 2 {
+                    let rawKey = parts[0]
+                    let rawCmd = parts[1].replacingOccurrences(of: "'", with: "").replacingOccurrences(of: "\"", with: "").lowercased()
+                    if rawCmd.starts(with: "mode ") {
+                        let targetMode = rawCmd.replacingOccurrences(of: "mode ", with: "").trimmingCharacters(in: .whitespaces)
+                        if targetMode != "main" {
+                            let formattedKey = formatAeroSpaceKey(rawKey)
+                            modeLeaders[targetMode] = formattedKey
+                        }
+                    }
+                }
+            }
         }
 
         var focusItems: [ShortcutItem] = []
@@ -18,37 +41,66 @@ struct AeroSpaceConfigParser {
         var workspaceItems: [ShortcutItem] = []
         var moveNodeItems: [ShortcutItem] = []
         var otherItems: [ShortcutItem] = []
+        var modalGroups: [String: [ShortcutItem]] = [:]
 
-        var inBindingMode = false
-        for line in content.components(separatedBy: .newlines) {
+        var currentMode = "main"
+        var inBindingSection = false
+
+        for line in lines {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed.isEmpty || trimmed.starts(with: "#") { continue }
 
             if trimmed.starts(with: "[") && trimmed.contains("binding") {
-                inBindingMode = true
+                inBindingSection = true
+                if trimmed.contains("mode.") {
+                    let withoutPrefix = trimmed.replacingOccurrences(of: "[mode.", with: "")
+                    if let dotIdx = withoutPrefix.firstIndex(of: ".") {
+                        currentMode = String(withoutPrefix[..<dotIdx])
+                    } else if let endIdx = withoutPrefix.firstIndex(of: "]") {
+                        currentMode = String(withoutPrefix[..<endIdx])
+                    } else {
+                        currentMode = "main"
+                    }
+                } else {
+                    currentMode = "main"
+                }
                 continue
             } else if trimmed.starts(with: "[") && !trimmed.contains("binding") {
-                inBindingMode = false
+                inBindingSection = false
                 continue
             }
 
-            if inBindingMode && trimmed.contains("=") {
+            if inBindingSection && trimmed.contains("=") {
+                // If onlyMainMode is requested (for global conflict detection), ignore modal sub-modes
+                if onlyMainMode && currentMode != "main" {
+                    continue
+                }
+
                 let parts = trimmed.split(separator: "=", maxSplits: 1).map { String($0).trimmingCharacters(in: .whitespaces) }
                 if parts.count == 2 {
                     let rawKey = parts[0]
                     let rawCmd = parts[1].replacingOccurrences(of: "'", with: "").replacingOccurrences(of: "\"", with: "")
 
-                    let formattedKey = formatAeroSpaceKey(rawKey)
+                    var formattedKey = formatAeroSpaceKey(rawKey)
                     let (title, category) = categorizeCommand(rawCmd)
 
-                    let item = ShortcutItem(title: title, keys: formattedKey)
-                    switch category {
-                    case .focus: focusItems.append(item)
-                    case .move: moveItems.append(item)
-                    case .layout: layoutItems.append(item)
-                    case .workspace: workspaceItems.append(item)
-                    case .moveNode: moveNodeItems.append(item)
-                    case .other: otherItems.append(item)
+                    if currentMode != "main" {
+                        let leader = modeLeaders[currentMode] ?? "<\(currentMode.capitalized)>"
+                        formattedKey = "\(leader) \(formattedKey)"
+                        let item = ShortcutItem(title: title, keys: formattedKey)
+                        var existing = modalGroups[currentMode] ?? []
+                        existing.append(item)
+                        modalGroups[currentMode] = existing
+                    } else {
+                        let item = ShortcutItem(title: title, keys: formattedKey)
+                        switch category {
+                        case .focus: focusItems.append(item)
+                        case .move: moveItems.append(item)
+                        case .layout: layoutItems.append(item)
+                        case .workspace: workspaceItems.append(item)
+                        case .moveNode: moveNodeItems.append(item)
+                        case .other: otherItems.append(item)
+                        }
                     }
                 }
             }
@@ -60,7 +112,16 @@ struct AeroSpaceConfigParser {
         if !layoutItems.isEmpty { groups.append(ShortcutGroup(title: "Layout & Resizing", items: layoutItems)) }
         if !workspaceItems.isEmpty { groups.append(ShortcutGroup(title: "Workspaces", items: workspaceItems)) }
         if !moveNodeItems.isEmpty { groups.append(ShortcutGroup(title: "Move Window to Workspace", items: moveNodeItems)) }
-        if !otherItems.isEmpty { groups.append(ShortcutGroup(title: "Service & Misc", items: otherItems)) }
+        if !otherItems.isEmpty { groups.append(ShortcutGroup(title: "AeroSpace System", items: otherItems)) }
+
+        // Append modal sub-mode groups (e.g. Service Mode)
+        if !onlyMainMode {
+            for (modeName, items) in modalGroups.sorted(by: { $0.key < $1.key }) {
+                let leader = modeLeaders[modeName] ?? "Leader"
+                let groupTitle = "\(modeName.capitalized) Mode (Leader: \(leader))"
+                groups.append(ShortcutGroup(title: groupTitle, items: items))
+            }
+        }
 
         return groups
     }
@@ -131,6 +192,10 @@ struct AeroSpaceConfigParser {
             return (clean.capitalized, .layout)
         } else if lower.contains("reload-config") {
             return ("Reload AeroSpace Config", .other)
+        } else if lower.contains("flatten-workspace-tree") {
+            return ("Flatten Workspace Tree (Reset Layout)", .layout)
+        } else if lower.contains("close-all-windows-but-current") {
+            return ("Close All Windows Except Current", .other)
         } else if lower.contains("mode") {
             return (clean, .other)
         }

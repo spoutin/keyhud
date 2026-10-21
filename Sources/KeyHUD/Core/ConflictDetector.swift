@@ -222,8 +222,8 @@ class ShortcutConflictDetector {
     func refreshGlobalShortcuts() {
         var map: [String: ConflictSeverity] = [:]
 
-        // 1. AeroSpace bindings
-        for grp in AeroSpaceConfigParser.parse() {
+        // 1. AeroSpace bindings (only main mode represents active global hotkeys)
+        for grp in AeroSpaceConfigParser.parse(onlyMainMode: true) {
             for item in grp.items {
                 for v in ShortcutNormalizer.variants(item.keys) {
                     let canon = ShortcutNormalizer.canonical(v)
