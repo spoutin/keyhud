@@ -1,0 +1,74 @@
+{
+  "com.mitchellh.ghostty": {
+    "Ghostty & Herdr": [
+      {
+        "title": "Ghostty Command Palette",
+        "keys": "⇧⌘P"
+      },
+      {
+        "title": "Split Horizontal",
+        "keys": "⌃S -"
+      },
+      {
+        "title": "Split Vertical",
+        "keys": "⌃S |"
+      },
+      {
+        "title": "Focus Pane Left",
+        "keys": "⌃S h"
+      },
+      {
+        "title": "Focus Pane Down",
+        "keys": "⌃S j"
+      },
+      {
+        "title": "Focus Pane Up",
+        "keys": "⌃S k"
+      },
+      {
+        "title": "Focus Pane Right",
+        "keys": "⌃S l"
+      }
+    ],
+    "Zsh & Shell": [
+      {
+        "title": "Atuin History Search",
+        "keys": "⌃R"
+      },
+      {
+        "title": "FZF File Picker",
+        "keys": "⌃T"
+      },
+      {
+        "title": "FZF Directory Jump",
+        "keys": "⌥C"
+      },
+      {
+        "title": "Forward Word",
+        "keys": "⌥F"
+      },
+      {
+        "title": "Backward Word",
+        "keys": "⌥B"
+      }
+    ],
+    "Neovim: Windows & Splits": [
+      {
+        "title": "Focus Left Window / Split",
+        "keys": "⌃h"
+      },
+      {
+        "title": "Focus Down Window / Split",
+        "keys": "⌃j"
+      },
+      {
+        "title": "Focus Up Window / Split",
+        "keys": "⌃k"
+      },
+      {
+        "title": "Focus Right Window / Split",
+        "keys": "⌃l"
+      }
+    ]
+  }
+}

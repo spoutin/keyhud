@@ -4,3 +4,13 @@
 *.sha256
 build/
 /tmp/KeyHUD
+
+# User configuration & personal keys
+custom_shortcuts.json
+
+# Internal planning notes & scratchpads
+docs/superpowers/
+IMPLEMENTATION_PLAN.md
+
+# macOS system metadata
+.DS_Store
