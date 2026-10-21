@@ -151,7 +151,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: "KeyHUD v${{ env.VERSION }}"
-          tag_name: ${{ github.ref_name }}
+          tag_name: v${{ env.VERSION }}
           draft: false
           prerelease: ${{ env.IS_PRERELEASE == 'true' }}
           generate_release_notes: true

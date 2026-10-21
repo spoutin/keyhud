@@ -1,6 +1,6 @@
 cask "keyhud@beta" do
-  version "1.0.0"
-  sha256 "1153d4d6e2574443cc5b98bb992e9f893abe592e22fb2aee7e438606856e3577"
+  version "1.0.1-beta.1"
+  sha256 "d8909326ca9c51655757b912752c01b06d87cbb6f4ecee5fd0a72c4875346cb7"
 
   url "https://github.com/spoutin/keyhud/releases/download/v#{version}/KeyHUD-#{version}.dmg"
   name "KeyHUD (Beta)"
