@@ -188,7 +188,7 @@ jobs:
 
               auto_updates true
               conflicts_with cask: "keyhud"
-              depends_on macos: ">= :sonoma"
+              depends_on macos: :sonoma
 
               app "KeyHUD.app"
 
@@ -216,7 +216,7 @@ jobs:
               homepage "https://github.com/spoutin/keyhud"
 
               auto_updates true
-              depends_on macos: ">= :sonoma"
+              depends_on macos: :sonoma
 
               app "KeyHUD.app"
 

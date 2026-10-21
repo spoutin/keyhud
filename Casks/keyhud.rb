@@ -8,12 +8,11 @@ cask "keyhud" do
   homepage "https://github.com/spoutin/keyhud"
 
   auto_updates true
-  depends_on macos: ">= :sonoma"
+  depends_on macos: :sonoma
 
   app "KeyHUD.app"
 
   postflight do
-    # Strip quarantine attribute automatically so Gatekeeper allows immediate launch
     system_command "/usr/bin/xattr",
                    args: ["-cr", "#{appdir}/KeyHUD.app"]
   end
