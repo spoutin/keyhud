@@ -429,3 +429,55 @@ struct FuzzyMatcher {
         return pIdx == pLower.endIndex ? score : nil
     }
 }
+
+// MARK: - High-Contrast Illuminated Slider
+
+struct AccentSlider: View {
+    @Binding var value: Double
+    var range: ClosedRange<Double>
+    var step: Double? = nil
+    var accentColor: Color
+
+    var body: some View {
+        GeometryReader { geo in
+            let width = geo.size.width
+            let percentage = CGFloat((value - range.lowerBound) / (range.upperBound - range.lowerBound))
+            let clampedPercentage = min(max(0, percentage), 1)
+
+            ZStack(alignment: .leading) {
+                // Background Track (Crisp, High Contrast in Dark & Light Modes)
+                Capsule()
+                    .fill(Color.white.opacity(0.22))
+                    .frame(height: 6)
+
+                // Illuminated Accent Fill Track
+                Capsule()
+                    .fill(accentColor)
+                    .frame(width: max(6, width * clampedPercentage), height: 6)
+
+                // High-Visibility Draggable Knob
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: 16, height: 16)
+                    .shadow(color: Color.black.opacity(0.4), radius: 3, x: 0, y: 1)
+                    .overlay(Circle().stroke(accentColor, lineWidth: 2))
+                    .offset(x: max(0, min(width - 16, (width * clampedPercentage) - 8)))
+            }
+            .frame(height: 20)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { gesture in
+                        let locationX = max(0, min(width, gesture.location.x))
+                        let newPercent = Double(locationX / width)
+                        var rawVal = range.lowerBound + newPercent * (range.upperBound - range.lowerBound)
+                        if let s = step {
+                            rawVal = (rawVal / s).rounded() * s
+                        }
+                        value = min(range.upperBound, max(range.lowerBound, rawVal))
+                    }
+            )
+        }
+        .frame(height: 20)
+    }
+}

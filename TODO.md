@@ -27,6 +27,8 @@
 
 - [x] BUGS
   - [x] When navigating via the arrow keys when you reach a column that has a vertical scroll, scrolling automatically follows active item into view. Horizontal arrow navigation also automatically scrolls across columns.
+  - [x] The sliders in the settings --> Appearance are black in dark mode and hard to see. (Resolved: Replaced native dark-mode NSSliders with custom high-contrast AccentSlider featuring bright white knob and illuminated accent track fill).
+  - [x] In Settings, when navigating between the top buttons, it looks like the buttons are loaded in from the top. They should be static not move similar to a frozen pane. (Resolved: Unified Settings window dimensions to 860x640, removed window frame resizing on tab clicks, and eliminated animated layout shifts so the header functions as a static frozen pane).
 
 ---
 

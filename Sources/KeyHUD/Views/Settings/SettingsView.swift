@@ -21,10 +21,7 @@ struct SettingsView: View {
             HStack(spacing: 6) {
                 ForEach(SettingsTab.allCases) { tab in
                     Button(action: {
-                        withAnimation(.easeInOut(duration: 0.12)) {
-                            settings.selectedSettingsTab = tab.rawValue
-                        }
-                        SettingsWindowController.shared.updateSizeForTab(tab)
+                        settings.selectedSettingsTab = tab.rawValue
                     }) {
                         HStack(spacing: 6) {
                             Image(systemName: tab.icon)
@@ -237,7 +234,7 @@ struct SettingsView: View {
                                     .font(.system(size: 13, weight: .semibold, design: .monospaced))
                                     .foregroundColor(settings.currentAccentColor)
                             }
-                            Slider(value: $settings.holdDuration, in: 0.15...0.80, step: 0.05)
+                            AccentSlider(value: $settings.holdDuration, range: 0.15...0.80, step: 0.05, accentColor: settings.currentAccentColor)
                         }
                         .padding(.top, 4)
                     }
@@ -507,7 +504,7 @@ struct SettingsView: View {
                                 .font(.system(size: 13, weight: .semibold, design: .monospaced))
                                 .foregroundColor(settings.currentAccentColor)
                         }
-                        Slider(value: $settings.widthPercent, in: 25...100, step: 1)
+                        AccentSlider(value: $settings.widthPercent, range: 25...100, step: 1, accentColor: settings.currentAccentColor)
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
@@ -520,7 +517,7 @@ struct SettingsView: View {
                                 .font(.system(size: 13, weight: .semibold, design: .monospaced))
                                 .foregroundColor(settings.currentAccentColor)
                         }
-                        Slider(value: $settings.heightPercent, in: 25...100, step: 1)
+                        AccentSlider(value: $settings.heightPercent, range: 25...100, step: 1, accentColor: settings.currentAccentColor)
                     }
 
                     Text("The HUD automatically shrinks to fit smaller shortcut lists, using these percentages as the maximum ceiling.")
@@ -593,23 +590,16 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private var eventMonitor: Any?
 
     init() {
-        let initialTab = SettingsTab(rawValue: AppSettings.shared.selectedSettingsTab) ?? .general
-        let initialSize: NSSize
-        switch initialTab {
-        case .general: initialSize = NSSize(width: 760, height: 600)
-        case .appearance: initialSize = NSSize(width: 760, height: 600)
-        case .shortcuts: initialSize = NSSize(width: 880, height: 680)
-        }
-
+        let defaultSize = NSSize(width: 860, height: 640)
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: initialSize.width, height: initialSize.height),
+            contentRect: NSRect(x: 0, y: 0, width: defaultSize.width, height: defaultSize.height),
             styleMask: [.titled, .closable, .resizable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
         window.title = "KeyHUD Settings & Keybinding Editor"
         window.collectionBehavior = [.moveToActiveSpace]
-        window.minSize = NSSize(width: 700, height: 500)
+        window.minSize = NSSize(width: 760, height: 540)
         window.center()
         window.isReleasedWhenClosed = false
         super.init(window: window)
@@ -694,31 +684,13 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func updateSizeForTab(_ tab: SettingsTab) {
-        guard let window = window else { return }
-        let targetSize: NSSize
-        switch tab {
-        case .general:
-            targetSize = NSSize(width: 760, height: 600)
-        case .appearance:
-            targetSize = NSSize(width: 760, height: 600)
-        case .shortcuts:
-            targetSize = NSSize(width: 880, height: 680)
-        }
-
-        if abs(window.frame.width - targetSize.width) > 2 || abs(window.frame.height - targetSize.height) > 2 {
-            var frame = window.frame
-            let oldHeight = frame.size.height
-            frame.origin.y += (oldHeight - targetSize.height)
-            frame.size = targetSize
-            window.setFrame(frame, display: true, animate: false)
-        }
+        // Keep window dimensions static across tab navigation to maintain frozen pane stability
     }
 
     func openSettings(selectingTab: SettingsTab = .general, bundleID: String? = nil) {
         AppSettings.shared.selectedSettingsTab = selectingTab.rawValue
         EditorState.shared.reload(selecting: bundleID)
         AppSettings.shared.updateWindowsAppearance()
-        updateSizeForTab(selectingTab)
         window?.center()
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
