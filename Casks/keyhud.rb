@@ -12,11 +12,6 @@ cask "keyhud" do
 
   app "KeyHUD.app"
 
-  postflight do
-    system_command "/usr/bin/xattr",
-                   args: ["-cr", "#{appdir}/KeyHUD.app"]
-  end
-
   zap trash: [
     "~/.config/keyhud",
     "~/Library/Preferences/com.ablack.KeyHUD.plist",
