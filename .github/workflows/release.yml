@@ -38,9 +38,9 @@ jobs:
           echo "Version is $VERSION"
 
       - name: Setup Temporary Build Keychain
-        if: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 != '' }}
+        if: secrets.APPLE_CERTIFICATE_P12_BASE64 != ''
         env:
-          BUILD_KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD || 'temporary-build-password-123' }}
+          BUILD_KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD != '' && secrets.KEYCHAIN_PASSWORD || 'temporary-build-password-123' }}
           CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
           CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: |
@@ -75,7 +75,7 @@ jobs:
           ./build.sh
 
       - name: Notarize and Staple (Apple Notary Service)
-        if: ${{ secrets.NOTARY_API_KEY_BASE64 != '' && secrets.NOTARY_KEY_ID != '' && secrets.NOTARY_ISSUER_ID != '' }}
+        if: secrets.NOTARY_API_KEY_BASE64 != '' && secrets.NOTARY_KEY_ID != '' && secrets.NOTARY_ISSUER_ID != ''
         env:
           NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
           NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
@@ -143,32 +143,35 @@ jobs:
           cd /tmp/homebrew-tap
           mkdir -p Casks
 
-          cat << EOF > Casks/keyhud.rb
-cask "keyhud" do
-  version "${{ env.VERSION }}"
-  sha256 "${SHA256}"
+          cat << 'EOF' | sed 's/^[ ]\{10\}//' > Casks/keyhud.rb
+          cask "keyhud" do
+            version "__VERSION__"
+            sha256 "__SHA256__"
 
-  url "https://github.com/spoutin/keyhud/releases/download/v#{version}/KeyHUD-#{version}.dmg"
-  name "KeyHUD"
-  desc "Instant floating shortcut cheatsheet & hotkey HUD for macOS, Ghostty, and CLI/TUI tools"
-  homepage "https://github.com/spoutin/keyhud"
+            url "https://github.com/spoutin/keyhud/releases/download/v#{version}/KeyHUD-#{version}.dmg"
+            name "KeyHUD"
+            desc "Instant floating shortcut cheatsheet & hotkey HUD for macOS, Ghostty, and CLI/TUI tools"
+            homepage "https://github.com/spoutin/keyhud"
 
-  auto_updates true
-  depends_on macos: ">= :sonoma"
+            auto_updates true
+            depends_on macos: ">= :sonoma"
 
-  app "KeyHUD.app"
+            app "KeyHUD.app"
 
-  postflight do
-    system_command "/usr/bin/xattr",
-                   args: ["-cr", "#{appdir}/KeyHUD.app"]
-  end
+            postflight do
+              system_command "/usr/bin/xattr",
+                             args: ["-cr", "#{appdir}/KeyHUD.app"]
+            end
 
-  zap trash: [
-    "~/.config/keyhud",
-    "~/Library/Preferences/com.ablack.KeyHUD.plist",
-  ]
-end
-EOF
+            zap trash: [
+              "~/.config/keyhud",
+              "~/Library/Preferences/com.ablack.KeyHUD.plist",
+            ]
+          end
+          EOF
+
+          sed -i '' "s/__VERSION__/${{ env.VERSION }}/g" Casks/keyhud.rb
+          sed -i '' "s/__SHA256__/${SHA256}/g" Casks/keyhud.rb
 
           git add Casks/keyhud.rb
           git commit -m "chore(cask): update keyhud to v${{ env.VERSION }}" || true
