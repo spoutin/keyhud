@@ -10,7 +10,11 @@ custom_shortcuts.json
 
 # Internal planning notes & scratchpads
 docs/superpowers/
+.superpowers/
 IMPLEMENTATION_PLAN.md
+
+# Swift Package Manager build artifacts
+.build/
 
 # macOS system metadata
 .DS_Store
