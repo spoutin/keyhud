@@ -9,7 +9,8 @@ ENTITLEMENTS="$CONFIG_DIR/KeyHUD.entitlements"
 VERSION="${VERSION:-1.0.0}"
 
 echo "==> Compiling KeyHUD (v$VERSION)..."
-swiftc -sdk $(xcrun --show-sdk-path) -O -whole-module-optimization -target arm64-apple-macos14.0 "$CONFIG_DIR/KeyHUD.swift" -o "/tmp/$BIN_NAME"
+SWIFT_SOURCES=$(find "$CONFIG_DIR/Sources/KeyHUD" -name "*.swift" | sort)
+swiftc -sdk $(xcrun --show-sdk-path) -O -whole-module-optimization -target arm64-apple-macos14.0 $SWIFT_SOURCES -o "/tmp/$BIN_NAME"
 
 echo "==> Creating App Bundle at $OUTPUT_DIR..."
 # If deploying directly to /Applications, quit any running instance
