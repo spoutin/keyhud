@@ -155,6 +155,16 @@
   - [x] Real-time warning feedback banner in shortcut recorder pill while typing keys.
   - [x] Visual warning badges with hover tooltips in Keybinding Editor rows and HUD cheatsheet rows.
 
+- [ ] **XDG Base Directory Specification Support**
+  - [ ] Respect `$XDG_CONFIG_HOME` (fallback to `~/.config`) for all custom shortcuts and config file locations:
+    - KeyHUD config: `$XDG_CONFIG_HOME/keyhud/custom_shortcuts.json`
+    - AeroSpace: `$XDG_CONFIG_HOME/aerospace/aerospace.toml` (and fallback to `~/.aerospace.toml`)
+    - Herdr: `$XDG_CONFIG_HOME/herdr/config.toml`
+    - Neovim: `$XDG_CONFIG_HOME/nvim/...`
+    - CLI/TUI tools: `$XDG_CONFIG_HOME/{k9s,lazygit,atuin}/...`
+  - [ ] Support `$XDG_DATA_HOME` (fallback to `~/.local/share/keyhud`) for markdown cheatsheet exports and persistent data.
+  - [ ] Support `$XDG_STATE_HOME` (fallback to `~/.local/state/keyhud`) for application logs and runtime state.
+
 - [ ] **App Ignore / Blacklist**
   - [ ] Add an "Ignored Applications" list in Settings under General (e.g. for full-screen games, VMs, remote desktop/VNC).
   - [ ] Prevent `HotKeyManager` Command-hold/tap listeners from triggering the HUD when an ignored app is frontmost.
