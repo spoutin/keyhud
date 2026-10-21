@@ -24,23 +24,21 @@ KeyHUD gives you lightning-fast (<5ms), at-a-glance visibility into keyboard sho
 
 ### Via Homebrew (Recommended)
 
-Install via the official `spoutin/tap`:
-
+#### Stable Channel
 ```bash
 brew install --cask spoutin/tap/keyhud
 ```
 
-Or tap the repository first:
-
+#### Beta / Pre-Release Channel
 ```bash
-brew tap spoutin/tap
-brew install --cask keyhud
+brew install --cask spoutin/tap/keyhud@beta
 ```
 
 To update in the future:
 
 ```bash
-brew upgrade keyhud
+brew upgrade keyhud        # Stable
+brew upgrade keyhud@beta   # Beta
 ```
 
 ---
