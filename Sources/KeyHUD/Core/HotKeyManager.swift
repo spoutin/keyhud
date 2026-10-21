@@ -7,8 +7,9 @@ import Carbon
 class HotKeyManager {
     static let shared = HotKeyManager()
     private var cmdWorkItem: DispatchWorkItem?
-    private var lastTapTimes: [Date] = []
-    private let tapWindow: TimeInterval = 0.4
+    private var consecutiveTapCount: Int = 0
+    private var lastCmdUpTime: Date? = nil
+    
     private var isCmdCurrentlyDown = false
     private var shouldIgnoreNextCmdUp = false
     private var carbonHotKeyRef: EventHotKeyRef?
@@ -111,22 +112,12 @@ class HotKeyManager {
     private func onCmdDown() {
         let now = Date()
 
-        // Filter taps based on consecutive gaps rather than absolute time from first tap.
-        // This ensures triple-taps don't drop the first tap just because the total sequence took > tapWindow.
-        var validTaps = [now]
-        for i in (0..<lastTapTimes.count).reversed() {
-            let current = (i == lastTapTimes.count - 1) ? now : lastTapTimes[i+1]
-            let prev = lastTapTimes[i]
-            if current.timeIntervalSince(prev) < tapWindow {
-                validTaps.insert(prev, at: 0)
-            } else {
-                break
-            }
+        // If the gap between the last Up event and this Down event is within 0.5s, it's a consecutive tap.
+        if let lastUp = lastCmdUpTime, now.timeIntervalSince(lastUp) < 0.5 {
+            consecutiveTapCount += 1
+        } else {
+            consecutiveTapCount = 1
         }
-        
-        // Remove the 'now' we just appended so lastTapTimes only contains prior completed taps (up events).
-        validTaps.removeLast()
-        lastTapTimes = validTaps
 
         let trigger = TriggerType(rawValue: AppSettings.shared.triggerType) ?? .doubleTapAndHold
         let holdSec = AppSettings.shared.holdDuration
@@ -141,21 +132,21 @@ class HotKeyManager {
             DispatchQueue.main.asyncAfter(deadline: .now() + holdSec, execute: work)
 
         case .doubleTap:
-            if lastTapTimes.count >= 1 {
-                lastTapTimes.removeAll()
+            if consecutiveTapCount >= 2 {
+                consecutiveTapCount = 0
                 shouldIgnoreNextCmdUp = true
                 HUDWindowController.shared.toggle()
             }
 
         case .tripleTap:
-            if lastTapTimes.count >= 2 {
-                lastTapTimes.removeAll()
+            if consecutiveTapCount >= 3 {
+                consecutiveTapCount = 0
                 shouldIgnoreNextCmdUp = true
                 HUDWindowController.shared.toggle()
             }
 
         case .doubleTapAndHold:
-            if lastTapTimes.count >= 1 {
+            if consecutiveTapCount >= 2 {
                 let holdDelay = max(0.08, holdSec * 0.35)
                 let work = DispatchWorkItem { [weak self] in
                     self?.shouldIgnoreNextCmdUp = true
@@ -166,7 +157,6 @@ class HotKeyManager {
             }
 
         case .hotkeyOnly:
-            // Modifier hold/tap is disabled; ⌘⇧/ is monitored exclusively
             break
         }
     }
@@ -176,6 +166,6 @@ class HotKeyManager {
             shouldIgnoreNextCmdUp = false
             return
         }
-        lastTapTimes.append(Date())
+        lastCmdUpTime = Date()
     }
 }
