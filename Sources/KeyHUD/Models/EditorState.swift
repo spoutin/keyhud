@@ -7,7 +7,6 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     case general = "General"
     case appearance = "Appearance"
     case shortcuts = "Shortcuts & Editor"
-    case keyboardMap = "Keyboard Map"
     case about = "About"
 
     var id: String { rawValue }
@@ -17,7 +16,6 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .general: return "gearshape"
         case .appearance: return "paintbrush"
         case .shortcuts: return "keyboard"
-        case .keyboardMap: return "keyboard.badge.eye"
         case .about: return "info.circle"
         }
     }
@@ -50,6 +48,12 @@ class EditorState: ObservableObject {
     @Published var liveModifiers: String = ""
     @Published var cachedConflictSummaries: [ConflictSummaryItem] = []
     private var cachedConflictsMap: [String: [ConflictSeverity]] = [:]
+
+    // Keyboard Heatmap State
+    @Published var isKeyboardHeatmapCollapsed: Bool = false
+    @Published var activeHeatmapModifiers: NSEvent.ModifierFlags = [.command]
+    @Published var selectedHeatmapKey: PhysicalKey? = nil
+    @Published var hoveredHeatmapKeyId: String? = nil
 
     var isRecording: Bool {
         recordingCategory != nil && recordingIndex != nil

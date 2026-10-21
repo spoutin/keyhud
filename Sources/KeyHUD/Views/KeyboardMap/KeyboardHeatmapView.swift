@@ -1,93 +1,31 @@
 import SwiftUI
 import AppKit
 
-// MARK: - Keyboard Heatmap State
+// MARK: - Embedded Keyboard Heatmap View (inside Keybinding Editor)
 
-class KeyboardHeatmapState: ObservableObject {
-    static let shared = KeyboardHeatmapState()
-
-    @Published var selectedScope: String = "ghostty"
-    @Published var activeModifiers: NSEvent.ModifierFlags = [.command]
-    @Published var selectedKey: PhysicalKey? = nil
-    @Published var hoveredKeyId: String? = nil
-}
-
-// MARK: - Keyboard Heatmap View
-
-struct KeyboardHeatmapView: View {
+struct EmbeddedKeyboardHeatmapView: View {
+    @ObservedObject var state: EditorState
+    let accent: Color
     @ObservedObject var settings = AppSettings.shared
-    @ObservedObject var state = KeyboardHeatmapState.shared
 
-    // Available Scopes
-    private var scopeOptions: [(id: String, name: String)] {
-        var options: [(id: String, name: String)] = [
-            ("ghostty", "Ghostty (Terminal)"),
-            ("aerospace", "AeroSpace (Global Tiling)"),
-            ("macos", "macOS System"),
-            ("all", "All Combined (Cross-Layer Collisions)")
-        ]
-
-        // Add frontmost app if available and not Ghostty
-        if let frontmost = NSWorkspace.shared.frontmostApplication,
-           let bundleId = frontmost.bundleIdentifier,
-           bundleId != "com.mitchellh.ghostty" && bundleId != "com.ablack.KeyHUD" {
-            options.insert((bundleId, "\(frontmost.localizedName ?? "Active App") (Frontmost)"), at: 0)
-        }
-
-        return options
-    }
-
-    // Computed bindings for current scope
+    // Current app's mapped keybindings
     private var currentBindings: [MappedKeybinding] {
         var list: [MappedKeybinding] = []
+        let appName = state.displayName(for: state.selectedBundleID)
 
-        if state.selectedScope == "ghostty" {
-            if let groups = CustomShortcutsManager.shared.groups(for: "com.mitchellh.ghostty") {
-                for group in groups {
-                    for item in group.items {
-                        list.append(MappedKeybinding(shortcut: item, category: group.title, appScope: "Ghostty"))
-                    }
-                }
+        // Read active editor groups for selected app
+        let groups = state.currentGroups()
+        for group in groups {
+            for item in group.items {
+                list.append(MappedKeybinding(shortcut: item, category: group.title, appScope: appName))
             }
-        } else if state.selectedScope == "aerospace" {
-            let groups = AeroSpaceConfigParser.parse()
-            for group in groups {
-                for item in group.items {
-                    list.append(MappedKeybinding(shortcut: item, category: group.title, appScope: "AeroSpace"))
-                }
-            }
-        } else if state.selectedScope == "macos" {
-            let groups = MacOSGlobalShortcuts.getGroups()
-            for group in groups {
-                for item in group.items {
-                    list.append(MappedKeybinding(shortcut: item, category: group.title, appScope: "macOS"))
-                }
-            }
-        } else if state.selectedScope == "all" {
-            if let groups = CustomShortcutsManager.shared.groups(for: "com.mitchellh.ghostty") {
-                for group in groups {
-                    for item in group.items {
-                        list.append(MappedKeybinding(shortcut: item, category: group.title, appScope: "Ghostty"))
-                    }
-                }
-            }
+        }
+
+        // Also cross-reference AeroSpace if selected
+        if state.selectedBundleID.lowercased().contains("aerospace") {
             for group in AeroSpaceConfigParser.parse() {
                 for item in group.items {
                     list.append(MappedKeybinding(shortcut: item, category: group.title, appScope: "AeroSpace"))
-                }
-            }
-            for group in MacOSGlobalShortcuts.getGroups() {
-                for item in group.items {
-                    list.append(MappedKeybinding(shortcut: item, category: group.title, appScope: "macOS"))
-                }
-            }
-        } else {
-            // Other custom app bundle ID
-            if let groups = CustomShortcutsManager.shared.groups(for: state.selectedScope) {
-                for group in groups {
-                    for item in group.items {
-                        list.append(MappedKeybinding(shortcut: item, category: group.title, appScope: state.selectedScope))
-                    }
                 }
             }
         }
@@ -95,12 +33,12 @@ struct KeyboardHeatmapView: View {
         return list
     }
 
-    // Total conflicts in current scope & modifier set
+    // Total layout conflicts for current modifier combo
     private var totalConflictsCount: Int {
         var count = 0
         for row in KeyboardLayout.standardMac75 {
             for key in row.keys {
-                let heat = KeyboardLayout.evaluateKey(key: key, activeModifiers: state.activeModifiers, bindings: currentBindings)
+                let heat = KeyboardLayout.evaluateKey(key: key, activeModifiers: state.activeHeatmapModifiers, bindings: currentBindings)
                 if heat.isConflict {
                     count += 1
                 }
@@ -110,107 +48,112 @@ struct KeyboardHeatmapView: View {
     }
 
     var body: some View {
-        VStack(spacing: 14) {
-            // Top Controls Bar
-            headerControlsBar
+        VStack(spacing: 0) {
+            // Header Bar & Toggles
+            HStack(spacing: 10) {
+                // Collapse / Expand Toggle
+                Button(action: {
+                    state.isKeyboardHeatmapCollapsed.toggle()
+                }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: state.isKeyboardHeatmapCollapsed ? "chevron.right" : "chevron.down")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(accent)
 
-            // Keyboard Chassis
-            keyboardChassisView
-
-            // Key Detail Inspector
-            if let key = state.selectedKey {
-                keyInspectorCard(for: key)
-            } else {
-                idleInspectorCard
-            }
-
-            // Legend Footer
-            legendFooterBar
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-    }
-
-    // MARK: - Header Controls Bar
-
-    private var headerControlsBar: some View {
-        HStack(spacing: 12) {
-            // Scope Picker
-            HStack(spacing: 6) {
-                Text("SCOPE:")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(.secondary)
-
-                Picker("", selection: $state.selectedScope) {
-                    ForEach(scopeOptions, id: \.id) { opt in
-                        Text(opt.name).tag(opt.id)
+                        Text("KEYBOARD HEATMAP & KEY AVAILABILITY")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.secondary)
                     }
                 }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .frame(width: 220)
-            }
+                .buttonStyle(PlainButtonStyle())
 
-            // Conflict Warning Pill
-            if totalConflictsCount > 0 {
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(Color.red)
-                        .frame(width: 6, height: 6)
-                    Text("\(totalConflictsCount) Conflicts Detected")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(.red)
+                if totalConflictsCount > 0 {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(Color.red)
+                            .frame(width: 5, height: 5)
+                        Text("\(totalConflictsCount) Conflicts on Layout")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.red)
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.red.opacity(0.12))
+                    .cornerRadius(8)
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(Color.red.opacity(0.12))
-                .cornerRadius(10)
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.red.opacity(0.25), lineWidth: 1))
-            }
 
-            Spacer()
+                Spacer()
 
-            // Active Modifier Buttons
-            HStack(spacing: 5) {
-                Text("MODIFIERS:")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(.secondary)
+                if !state.isKeyboardHeatmapCollapsed {
+                    // Active Modifier Toggles
+                    HStack(spacing: 4) {
+                        Text("MODIFIERS:")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.secondary)
 
-                modifierButton(title: "⌘ Cmd", flag: .command, color: .blue)
-                modifierButton(title: "⌥ Opt", flag: .option, color: .orange)
-                modifierButton(title: "⌃ Ctrl", flag: .control, color: .purple)
-                modifierButton(title: "⇧ Shift", flag: .shift, color: .green)
+                        modifierButton(title: "⌘ Cmd", flag: .command, color: .blue)
+                        modifierButton(title: "⌥ Opt", flag: .option, color: .orange)
+                        modifierButton(title: "⌃ Ctrl", flag: .control, color: .purple)
+                        modifierButton(title: "⇧ Shift", flag: .shift, color: .green)
 
-                Button("Clear") {
-                    state.activeModifiers = []
-                    state.selectedKey = nil
+                        Button("Clear") {
+                            state.activeHeatmapModifiers = []
+                            state.selectedHeatmapKey = nil
+                        }
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                        .buttonStyle(.plain)
+                        .padding(.leading, 3)
+                    }
                 }
-                .font(.system(size: 11))
-                .foregroundColor(.secondary)
-                .buttonStyle(.plain)
-                .padding(.leading, 4)
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(Color(NSColor.controlBackgroundColor).opacity(0.4))
+
+            // Expandable Keyboard Body
+            if !state.isKeyboardHeatmapCollapsed {
+                VStack(spacing: 8) {
+                    // Keyboard Chassis
+                    keyboardChassisView
+
+                    // Selected Key Detail Inspector
+                    if let key = state.selectedHeatmapKey {
+                        keyInspectorCard(for: key)
+                    }
+
+                    // Legend Footer
+                    legendFooterBar
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(Color(red: 0.07, green: 0.08, blue: 0.09))
+            }
+
+            Divider()
         }
     }
 
+    // MARK: - Modifier Button Component
+
     private func modifierButton(title: String, flag: NSEvent.ModifierFlags, color: Color) -> some View {
-        let isActive = state.activeModifiers.contains(flag)
+        let isActive = state.activeHeatmapModifiers.contains(flag)
         return Button(action: {
             if isActive {
-                state.activeModifiers.remove(flag)
+                state.activeHeatmapModifiers.remove(flag)
             } else {
-                state.activeModifiers.insert(flag)
+                state.activeHeatmapModifiers.insert(flag)
             }
         }) {
             Text(title)
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: 10, weight: .semibold))
                 .foregroundColor(isActive ? .white : .primary)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 4)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
                 .background(isActive ? color : Color(NSColor.controlBackgroundColor))
-                .cornerRadius(5)
+                .cornerRadius(4)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 5)
+                    RoundedRectangle(cornerRadius: 4)
                         .stroke(isActive ? color : Color.white.opacity(0.12), lineWidth: 1)
                 )
         }
@@ -220,47 +163,46 @@ struct KeyboardHeatmapView: View {
     // MARK: - Keyboard Chassis View
 
     private var keyboardChassisView: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 3) {
             ForEach(KeyboardLayout.standardMac75) { row in
-                HStack(spacing: 4) {
+                HStack(spacing: 3) {
                     ForEach(row.keys) { key in
                         keycapView(for: key, rowId: row.id)
                     }
                 }
             }
         }
-        .padding(10)
-        .background(Color(red: 0.08, green: 0.09, blue: 0.11))
-        .cornerRadius(10)
+        .padding(8)
+        .background(Color(red: 0.10, green: 0.11, blue: 0.13))
+        .cornerRadius(8)
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: 8)
                 .stroke(Color.white.opacity(0.08), lineWidth: 1)
         )
-        .shadow(color: Color.black.opacity(0.4), radius: 6, x: 0, y: 3)
     }
 
     // MARK: - Single Keycap View
 
     private func keycapView(for key: PhysicalKey, rowId: Int) -> some View {
-        let heat = KeyboardLayout.evaluateKey(key: key, activeModifiers: state.activeModifiers, bindings: currentBindings)
-        let isSelected = state.selectedKey?.id == key.id
-        let isHovered = state.hoveredKeyId == key.id
+        let heat = KeyboardLayout.evaluateKey(key: key, activeModifiers: state.activeHeatmapModifiers, bindings: currentBindings)
+        let isSelected = state.selectedHeatmapKey?.id == key.id
+        let isHovered = state.hoveredHeatmapKeyId == key.id
         let isSpecialModifier = key.isModifier && isPhysicalModifierActive(key: key)
 
-        let rowHeight: CGFloat = (rowId == 0) ? 26 : 42
+        let rowHeight: CGFloat = (rowId == 0) ? 22 : 36
 
         return Button(action: {
-            state.selectedKey = key
+            state.selectedHeatmapKey = key
         }) {
             ZStack(alignment: .topLeading) {
                 // Background Styling
                 keycapBackground(heat: heat, isSelected: isSelected, isModifierActive: isSpecialModifier)
 
                 // Keycap Labels
-                VStack(alignment: .leading, spacing: 1) {
+                VStack(alignment: .leading, spacing: 0) {
                     // Top Hardware Glyph
                     Text(key.glyph)
-                        .font(.system(size: rowId == 0 ? 9 : 11, weight: .bold))
+                        .font(.system(size: rowId == 0 ? 8 : 10, weight: .bold))
                         .foregroundColor(keycapGlyphColor(heat: heat, isModifierActive: isSpecialModifier))
 
                     Spacer(minLength: 0)
@@ -268,39 +210,39 @@ struct KeyboardHeatmapView: View {
                     // Bottom Mapped Action Title
                     if case .assigned(let binding) = heat {
                         Text(binding.shortcut.title)
-                            .font(.system(size: 7, weight: .semibold, design: .monospaced))
-                            .foregroundColor(settings.currentAccentColor)
+                            .font(.system(size: 6.5, weight: .semibold, design: .monospaced))
+                            .foregroundColor(accent)
                             .lineLimit(1)
                     } else if case .conflict = heat {
                         Text("⚠️ Conflict")
-                            .font(.system(size: 7, weight: .bold))
+                            .font(.system(size: 6.5, weight: .bold))
                             .foregroundColor(.red)
                             .lineLimit(1)
                     }
                 }
-                .padding(.horizontal, 4)
-                .padding(.vertical, 3)
+                .padding(.horizontal, 3)
+                .padding(.vertical, 2)
             }
-            .frame(minWidth: 20 * key.widthRatio, maxWidth: .infinity)
+            .frame(minWidth: 18 * key.widthRatio, maxWidth: .infinity)
             .frame(height: rowHeight)
             .scaleEffect(isHovered ? 1.02 : 1.0)
             .animation(.easeOut(duration: 0.1), value: isHovered)
         }
         .buttonStyle(.plain)
         .onHover { hovering in
-            state.hoveredKeyId = hovering ? key.id : nil
+            state.hoveredHeatmapKeyId = hovering ? key.id : nil
         }
     }
 
     private func isPhysicalModifierActive(key: PhysicalKey) -> Bool {
         if key.id == "r5_lcmd" || key.id == "r5_rcmd" {
-            return state.activeModifiers.contains(.command)
+            return state.activeHeatmapModifiers.contains(.command)
         } else if key.id == "r5_lopt" || key.id == "r5_ropt" {
-            return state.activeModifiers.contains(.option)
+            return state.activeHeatmapModifiers.contains(.option)
         } else if key.id == "r5_lctrl" {
-            return state.activeModifiers.contains(.control)
+            return state.activeHeatmapModifiers.contains(.control)
         } else if key.id == "r4_lshift" || key.id == "r4_rshift" {
-            return state.activeModifiers.contains(.shift)
+            return state.activeHeatmapModifiers.contains(.shift)
         }
         return false
     }
@@ -315,9 +257,9 @@ struct KeyboardHeatmapView: View {
             case .conflict:
                 return Color(red: 0.35, green: 0.08, blue: 0.08)
             case .assigned:
-                return settings.currentAccentColor.opacity(0.25)
+                return accent.opacity(0.25)
             case .available:
-                return Color(red: 0.14, green: 0.15, blue: 0.18)
+                return Color(red: 0.15, green: 0.16, blue: 0.19)
             }
         }()
 
@@ -332,19 +274,19 @@ struct KeyboardHeatmapView: View {
             case .conflict:
                 return Color.red
             case .assigned:
-                return settings.currentAccentColor
+                return accent
             case .available:
                 return Color.white.opacity(0.08)
             }
         }()
 
-        RoundedRectangle(cornerRadius: 5)
+        RoundedRectangle(cornerRadius: 4)
             .fill(baseColor)
             .overlay(
-                RoundedRectangle(cornerRadius: 5)
-                    .stroke(borderColor, lineWidth: isSelected ? 2 : 1)
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(borderColor, lineWidth: isSelected ? 1.5 : 1)
             )
-            .shadow(color: Color.black.opacity(0.35), radius: 2, x: 0, y: 2)
+            .shadow(color: Color.black.opacity(0.3), radius: 1, x: 0, y: 1)
     }
 
     private func keycapGlyphColor(heat: KeyHeatState, isModifierActive: Bool) -> Color {
@@ -361,41 +303,42 @@ struct KeyboardHeatmapView: View {
         }
     }
 
-    // MARK: - Key Inspector Cards
+    // MARK: - Key Inspector Card
 
     private func keyInspectorCard(for key: PhysicalKey) -> some View {
-        let heat = KeyboardLayout.evaluateKey(key: key, activeModifiers: state.activeModifiers, bindings: currentBindings)
-        let comboString = formatModifierPrefix(state.activeModifiers) + key.glyph.uppercased()
+        let heat = KeyboardLayout.evaluateKey(key: key, activeModifiers: state.activeHeatmapModifiers, bindings: currentBindings)
+        let comboString = formatModifierPrefix(state.activeHeatmapModifiers) + key.glyph.uppercased()
+        let appName = state.displayName(for: state.selectedBundleID)
 
-        return HStack(spacing: 16) {
-            VStack(alignment: .leading, spacing: 3) {
+        return HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 8) {
                     Text(comboString)
-                        .font(.system(size: 16, weight: .bold, design: .monospaced))
+                        .font(.system(size: 14, weight: .bold, design: .monospaced))
                         .foregroundColor(.primary)
 
                     switch heat {
                     case .assigned(let binding):
-                        Text("Assigned • \(binding.appScope)")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(settings.currentAccentColor)
-                            .padding(.horizontal, 6)
+                        Text("Assigned • \(binding.category)")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(accent)
+                            .padding(.horizontal, 5)
                             .padding(.vertical, 2)
-                            .background(settings.currentAccentColor.opacity(0.14))
+                            .background(accent.opacity(0.14))
                             .cornerRadius(4)
                     case .conflict(let bindings):
                         Text("⚠️ \(bindings.count) Colliding Shortcuts")
-                            .font(.system(size: 11, weight: .bold))
+                            .font(.system(size: 10, weight: .bold))
                             .foregroundColor(.red)
-                            .padding(.horizontal, 6)
+                            .padding(.horizontal, 5)
                             .padding(.vertical, 2)
                             .background(Color.red.opacity(0.15))
                             .cornerRadius(4)
                     case .available:
                         Text("Available (Free)")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(size: 10, weight: .medium))
                             .foregroundColor(.secondary)
-                            .padding(.horizontal, 6)
+                            .padding(.horizontal, 5)
                             .padding(.vertical, 2)
                             .background(Color.white.opacity(0.06))
                             .cornerRadius(4)
@@ -404,68 +347,56 @@ struct KeyboardHeatmapView: View {
 
                 switch heat {
                 case .assigned(let binding):
-                    Text("\(binding.shortcut.title) (\(binding.category))")
-                        .font(.system(size: 12))
+                    Text(binding.shortcut.title)
+                        .font(.system(size: 11))
                         .foregroundColor(.secondary)
                 case .conflict(let bindings):
-                    VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 8) {
                         ForEach(bindings) { b in
-                            Text("• [\(b.appScope)] \(b.shortcut.title) (\(b.category))")
+                            Text("• \(b.shortcut.title) (\(b.category))")
                                 .font(.system(size: 11))
                                 .foregroundColor(.secondary)
                         }
                     }
                 case .available:
-                    Text("No shortcuts assigned to this key combo in the current scope.")
-                        .font(.system(size: 12))
+                    Text("No shortcut assigned to '\(comboString)' in \(appName). Available to bind!")
+                        .font(.system(size: 11))
                         .foregroundColor(.secondary)
                 }
             }
 
             Spacer()
 
-            Button("Deselect") {
-                state.selectedKey = nil
+            Button("Dismiss") {
+                state.selectedHeatmapKey = nil
             }
-            .font(.system(size: 11))
+            .font(.system(size: 10))
         }
-        .padding(12)
+        .padding(8)
         .background(Color(NSColor.controlBackgroundColor))
-        .cornerRadius(8)
-    }
-
-    private var idleInspectorCard: some View {
-        HStack {
-            Text("Click any keycap to inspect command details, collisions, and categories.")
-                .font(.system(size: 12))
-                .foregroundColor(.secondary)
-            Spacer()
-        }
-        .padding(12)
-        .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
-        .cornerRadius(8)
+        .cornerRadius(6)
     }
 
     // MARK: - Legend Footer Bar
 
     private var legendFooterBar: some View {
-        HStack(spacing: 16) {
-            legendItem(color: settings.currentAccentColor, label: "Assigned")
+        HStack(spacing: 12) {
+            legendItem(color: accent, label: "Assigned")
             legendItem(color: Color.white.opacity(0.2), label: "Available (Free)")
             legendItem(color: .red, label: "Conflict / Collision")
             Spacer()
-            Text("Pro tip: Toggle modifiers above to reveal occupied keymaps")
-                .font(.system(size: 11))
+            Text("Click key to inspect • Toggle modifiers above to update layout")
+                .font(.system(size: 10))
                 .foregroundColor(.secondary)
         }
-        .font(.system(size: 11))
+        .font(.system(size: 10))
     }
 
     private func legendItem(color: Color, label: String) -> some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 4) {
             RoundedRectangle(cornerRadius: 2)
                 .fill(color)
-                .frame(width: 9, height: 9)
+                .frame(width: 8, height: 8)
             Text(label)
                 .foregroundColor(.secondary)
         }

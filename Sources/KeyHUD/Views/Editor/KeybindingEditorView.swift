@@ -134,6 +134,9 @@ struct KeybindingEditorView: View {
             // Conflict Summary Banner
             ConflictSummaryBannerView(state: state, accent: accent)
 
+            // Embedded Interactive Keyboard Heatmap
+            EmbeddedKeyboardHeatmapView(state: state, accent: accent)
+
             // Inline App Adder Banner
             if state.isAddingApp {
                 HStack(spacing: 10) {

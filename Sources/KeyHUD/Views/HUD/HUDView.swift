@@ -624,7 +624,7 @@ struct HUDView: View {
                 // Keyboard Heatmap Button
                 Button(action: {
                     HUDWindowController.shared.hide()
-                    SettingsWindowController.shared.openSettings(selectingTab: .keyboardMap)
+                    SettingsWindowController.shared.openSettings(selectingTab: .shortcuts, bundleID: bundleID)
                 }) {
                     Image(systemName: "keyboard")
                         .font(.system(size: 15, weight: .semibold))

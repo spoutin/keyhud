@@ -121,7 +121,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc func openKeyboardHeatmap() {
-        SettingsWindowController.shared.openSettings(selectingTab: .keyboardMap)
+        SettingsWindowController.shared.openSettings(selectingTab: .shortcuts)
     }
 
     @objc func openAbout() {
