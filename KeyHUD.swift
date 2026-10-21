@@ -542,6 +542,181 @@ struct KeyComboDecoder {
     }
 }
 
+// MARK: - Shortcut Normalizer & Conflict Detection
+
+struct ShortcutNormalizer {
+    static let modifierOrder: [Character] = ["⌃", "⌥", "⇧", "⌘"]
+
+    static func canonical(_ raw: String) -> String {
+        var str = raw.trimmingCharacters(in: .whitespaces)
+        str = str.replacingOccurrences(of: "ctrl+", with: "⌃")
+                 .replacingOccurrences(of: "alt+", with: "⌥")
+                 .replacingOccurrences(of: "opt+", with: "⌥")
+                 .replacingOccurrences(of: "shift+", with: "⇧")
+                 .replacingOccurrences(of: "cmd+", with: "⌘")
+
+        var modifiers: [Character] = []
+        var keys: [Character] = []
+
+        for ch in str {
+            if modifierOrder.contains(ch) {
+                if !modifiers.contains(ch) {
+                    modifiers.append(ch)
+                }
+            } else if ch != " " {
+                keys.append(Character(ch.lowercased()))
+            }
+        }
+
+        modifiers.sort { (a, b) -> Bool in
+            let idxA = modifierOrder.firstIndex(of: a) ?? 99
+            let idxB = modifierOrder.firstIndex(of: b) ?? 99
+            return idxA < idxB
+        }
+
+        return String(modifiers) + String(keys)
+    }
+
+    static func variants(_ rawKeys: String) -> [String] {
+        return rawKeys.split(separator: "/").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+}
+
+enum ConflictSeverity: Equatable {
+    case duplicateApp(otherTitle: String, category: String)
+    case globalAeroSpace(action: String)
+    case globalMacOS(action: String)
+    case globalKeyHUD
+
+    var badgeText: String {
+        switch self {
+        case .duplicateApp(let otherTitle, _):
+            return "Conflict: \"\(otherTitle)\""
+        case .globalAeroSpace(let act):
+            return "Global: AeroSpace (\(act))"
+        case .globalMacOS(let act):
+            return "Global: macOS (\(act))"
+        case .globalKeyHUD:
+            return "Global: KeyHUD Hotkey"
+        }
+    }
+
+    var tooltip: String {
+        switch self {
+        case .duplicateApp(let otherTitle, let cat):
+            return "App Conflict: Same shortcut is also assigned to '\(otherTitle)' in '\(cat)'"
+        case .globalAeroSpace(let act):
+            return "System Conflict: Collides with AeroSpace window tiling command '\(act)'"
+        case .globalMacOS(let act):
+            return "System Conflict: Collides with macOS System shortcut '\(act)'"
+        case .globalKeyHUD:
+            return "System Conflict: Collides with KeyHUD toggle hotkey (⌘⇧/)"
+        }
+    }
+
+    var isGlobal: Bool {
+        switch self {
+        case .duplicateApp: return false
+        default: return true
+        }
+    }
+}
+
+struct ConflictSummaryItem: Identifiable {
+    let id = UUID()
+    let category: String
+    let title: String
+    let keys: String
+    let conflicts: [ConflictSeverity]
+}
+
+class ShortcutConflictDetector {
+    static let shared = ShortcutConflictDetector()
+
+    private var globalCache: [String: ConflictSeverity] = [:]
+
+    init() {
+        refreshGlobalShortcuts()
+    }
+
+    func refreshGlobalShortcuts() {
+        var map: [String: ConflictSeverity] = [:]
+
+        // 1. AeroSpace bindings
+        for grp in AeroSpaceConfigParser.parse() {
+            for item in grp.items {
+                for v in ShortcutNormalizer.variants(item.keys) {
+                    let canon = ShortcutNormalizer.canonical(v)
+                    if !canon.isEmpty && map[canon] == nil {
+                        map[canon] = .globalAeroSpace(action: item.title)
+                    }
+                }
+            }
+        }
+
+        // 2. macOS System shortcuts
+        for grp in MacOSGlobalShortcuts.getGroups() {
+            for item in grp.items {
+                for v in ShortcutNormalizer.variants(item.keys) {
+                    let canon = ShortcutNormalizer.canonical(v)
+                    if !canon.isEmpty && map[canon] == nil {
+                        map[canon] = .globalMacOS(action: item.title)
+                    }
+                }
+            }
+        }
+
+        // 3. KeyHUD activation hotkey
+        map[ShortcutNormalizer.canonical("⌘⇧/")] = .globalKeyHUD
+        map[ShortcutNormalizer.canonical("⌘⇧?")] = .globalKeyHUD
+
+        self.globalCache = map
+    }
+
+    func checkGlobalConflict(keys: String) -> ConflictSeverity? {
+        for v in ShortcutNormalizer.variants(keys) {
+            let canon = ShortcutNormalizer.canonical(v)
+            if let conflict = globalCache[canon] {
+                return conflict
+            }
+        }
+        return nil
+    }
+
+    func checkInternalConflict(keys: String, currentTitle: String, inCategories categories: [String], shortcutsProvider: (String) -> [[String: String]]) -> ConflictSeverity? {
+        let currentVariants = ShortcutNormalizer.variants(keys).map { ShortcutNormalizer.canonical($0) }
+        guard !currentVariants.isEmpty else { return nil }
+
+        for cat in categories {
+            let items = shortcutsProvider(cat)
+            for other in items {
+                let otherTitle = other["title"] ?? ""
+                if otherTitle == currentTitle { continue }
+                let otherKeys = other["keys"] ?? ""
+                let otherVariants = ShortcutNormalizer.variants(otherKeys).map { ShortcutNormalizer.canonical($0) }
+
+                for cv in currentVariants {
+                    if !cv.isEmpty && otherVariants.contains(cv) {
+                        return .duplicateApp(otherTitle: otherTitle, category: cat)
+                    }
+                }
+            }
+        }
+        return nil
+    }
+
+    func allConflicts(for keys: String, currentTitle: String, inCategories categories: [String], shortcutsProvider: (String) -> [[String: String]]) -> [ConflictSeverity] {
+        var results: [ConflictSeverity] = []
+        if let internalConf = checkInternalConflict(keys: keys, currentTitle: currentTitle, inCategories: categories, shortcutsProvider: shortcutsProvider) {
+            results.append(internalConf)
+        }
+        if let globalConf = checkGlobalConflict(keys: keys) {
+            results.append(globalConf)
+        }
+        return results
+    }
+}
+
 // MARK: - Custom Shortcuts Manager & Importer
 
 class CustomShortcutsManager {
@@ -1025,6 +1200,8 @@ class EditorState: ObservableObject {
     @Published var isAddingCategory: Bool = false
     @Published var isAddingApp: Bool = false
     @Published var newAppBundleID: String = ""
+    @Published var filterOnlyConflicts: Bool = false
+    @Published var isConflictDetailsExpanded: Bool = false
     @Published var recordingCategory: String? = nil
     @Published var recordingIndex: Int? = nil
     @Published var recordingVariantIndex: Int? = nil
@@ -1229,6 +1406,37 @@ class EditorState: ObservableObject {
 
     func shortcuts(for category: String) -> [[String: String]] {
         return config[selectedBundleID]?[category] ?? []
+    }
+
+    func allConflictSummaries() -> [ConflictSummaryItem] {
+        var results: [ConflictSummaryItem] = []
+        for cat in currentCategories {
+            let items = shortcuts(for: cat)
+            for item in items {
+                let keys = item["keys"] ?? ""
+                let title = item["title"] ?? ""
+                guard !keys.trimmingCharacters(in: .whitespaces).isEmpty else { continue }
+                let conflicts = ShortcutConflictDetector.shared.allConflicts(
+                    for: keys,
+                    currentTitle: title,
+                    inCategories: currentCategories,
+                    shortcutsProvider: { self.shortcuts(for: $0) }
+                )
+                if !conflicts.isEmpty {
+                    results.append(ConflictSummaryItem(
+                        category: cat,
+                        title: title,
+                        keys: keys,
+                        conflicts: conflicts
+                    ))
+                }
+            }
+        }
+        return results
+    }
+
+    func totalConflictsCount() -> Int {
+        return allConflictSummaries().count
     }
 
     func addApp(bundleID: String) {
@@ -3302,6 +3510,137 @@ struct RecordingBadgeView: View {
     }
 }
 
+// MARK: - Conflict Summary Banner View
+
+struct ConflictSummaryBannerView: View {
+    @ObservedObject var state: EditorState
+    let accent: Color
+
+    var body: some View {
+        let conflicts = state.allConflictSummaries()
+        if !conflicts.isEmpty {
+            let internalCount = conflicts.filter { $0.conflicts.contains(where: { !$0.isGlobal }) }.count
+            let globalCount = conflicts.filter { $0.conflicts.contains(where: { $0.isGlobal }) }.count
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .center, spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(Color.orange)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(conflicts.count) Hotkey Collision\(conflicts.count == 1 ? "" : "s") Detected")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(Color.orange)
+
+                        Text("\(internalCount) app duplicate\(internalCount == 1 ? "" : "s"), \(globalCount) system collision\(globalCount == 1 ? "" : "s") in \(state.displayName(for: state.selectedBundleID)).")
+                            .font(.system(size: 11))
+                            .foregroundColor(Color.white.opacity(0.85))
+                    }
+
+                    Spacer()
+
+                    // Expand / Collapse Details Button
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            state.isConflictDetailsExpanded.toggle()
+                        }
+                    }) {
+                        HStack(spacing: 4) {
+                            Text(state.isConflictDetailsExpanded ? "Hide Details" : "View Details (\(conflicts.count))")
+                                .font(.system(size: 11, weight: .semibold))
+                            Image(systemName: state.isConflictDetailsExpanded ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 9, weight: .bold))
+                        }
+                        .foregroundColor(Color.orange)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.orange.opacity(0.15))
+                        .cornerRadius(5)
+                        .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.orange.opacity(0.35), lineWidth: 0.8))
+                    }
+                    .buttonStyle(PlainButtonStyle())
+
+                    // Filter Only Conflicting Shortcuts Button
+                    Button(action: {
+                        state.filterOnlyConflicts.toggle()
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: state.filterOnlyConflicts ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                                .font(.system(size: 11, weight: .semibold))
+                            Text(state.filterOnlyConflicts ? "Showing Conflicts Only" : "Filter Conflicting Rows")
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                        .foregroundColor(state.filterOnlyConflicts ? .black : Color.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(state.filterOnlyConflicts ? Color.orange : Color.white.opacity(0.12))
+                        .cornerRadius(5)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+
+                // Expanded Breakdown List
+                if state.isConflictDetailsExpanded {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Divider().background(Color.orange.opacity(0.3))
+
+                        ForEach(conflicts) { item in
+                            HStack(alignment: .center, spacing: 8) {
+                                // Key Badges
+                                let tokens = KeyTokenParser.parse(item.keys)
+                                HStack(spacing: 2) {
+                                    ForEach(Array(tokens.enumerated()), id: \.offset) { _, t in
+                                        Text(t.text)
+                                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                            .padding(.horizontal, 4)
+                                            .padding(.vertical, 1)
+                                            .foregroundColor(t.color)
+                                            .background(RoundedRectangle(cornerRadius: 3).fill(t.color.opacity(0.20)))
+                                    }
+                                }
+
+                                Text("\"\(item.title)\"")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(.white)
+
+                                Text("in [\(item.category)]")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.secondary)
+
+                                Image(systemName: "arrow.right")
+                                    .font(.system(size: 9))
+                                    .foregroundColor(.secondary)
+
+                                ForEach(Array(item.conflicts.enumerated()), id: \.offset) { _, conf in
+                                    Text(conf.badgeText)
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundColor(conf.isGlobal ? Color.yellow : Color.orange)
+                                }
+                                Spacer()
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
+                    .padding(.top, 4)
+                }
+            }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.orange.opacity(0.12))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.orange.opacity(0.40), lineWidth: 1)
+            )
+            .padding(.horizontal, 20)
+            .padding(.top, 10)
+            .padding(.bottom, 4)
+        }
+    }
+}
+
 // MARK: - Keybinding Editor View & Window Controller
 
 struct KeybindingEditorView: View {
@@ -3377,6 +3716,28 @@ struct KeybindingEditorView: View {
                     }
                     .help("Export currently configured shortcuts to Markdown")
 
+                    // Conflict Filter Toggle Button
+                    let conflictCount = state.totalConflictsCount()
+                    if conflictCount > 0 {
+                        Button(action: {
+                            state.filterOnlyConflicts.toggle()
+                        }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: state.filterOnlyConflicts ? "exclamationmark.triangle.fill" : "exclamationmark.triangle")
+                                    .font(.system(size: 11, weight: .bold))
+                                Text("Conflicts (\(conflictCount))")
+                                    .font(.system(size: 11, weight: state.filterOnlyConflicts ? .bold : .medium))
+                            }
+                            .foregroundColor(state.filterOnlyConflicts ? .black : Color.orange)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(state.filterOnlyConflicts ? Color.orange : Color.orange.opacity(0.14))
+                            .cornerRadius(5)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .help(state.filterOnlyConflicts ? "Showing conflicting shortcuts only — click to view all" : "Filter to \(conflictCount) conflicting shortcuts")
+                    }
+
                     Button(action: {
                         state.undo()
                     }) {
@@ -3406,6 +3767,9 @@ struct KeybindingEditorView: View {
             .background(Color(NSColor.windowBackgroundColor))
 
             Divider()
+
+            // Conflict Summary Banner
+            ConflictSummaryBannerView(state: state, accent: accent)
 
             // Inline App Adder Banner
             if state.isAddingApp {
@@ -3511,79 +3875,94 @@ struct KeybindingEditorView: View {
                         }
                     } else {
                         ForEach(state.currentCategories, id: \.self) { category in
-                            VStack(alignment: .leading, spacing: 10) {
-                                // Category Header
-                                HStack(spacing: 10) {
-                                    Text(category.uppercased())
-                                        .font(.system(size: 11, weight: .bold))
-                                        .foregroundColor(accent)
+                            let allCategoryItems = state.shortcuts(for: category)
+                            let visibleCategoryItems: [(Int, [String: String])] = allCategoryItems.enumerated().compactMap { idx, item in
+                                if !state.filterOnlyConflicts { return (idx, item) }
+                                let k = item["keys"] ?? ""
+                                let t = item["title"] ?? ""
+                                guard !k.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+                                let confs = ShortcutConflictDetector.shared.allConflicts(
+                                    for: k,
+                                    currentTitle: t,
+                                    inCategories: state.currentCategories,
+                                    shortcutsProvider: { state.shortcuts(for: $0) }
+                                )
+                                return confs.isEmpty ? nil : (idx, item)
+                            }
 
-                                    if state.selectedBundleID == "com.mitchellh.ghostty" {
-                                        let isShownOnMain = settings.isGhosttyCategoryShownOnMain(category)
-                                        Button(action: {
-                                            settings.toggleGhosttyCategoryOnMain(category)
-                                        }) {
-                                            HStack(spacing: 4) {
-                                                Image(systemName: isShownOnMain ? "checkmark.circle.fill" : "circle")
-                                                    .foregroundColor(isShownOnMain ? Color.green : .secondary)
-                                                    .font(.system(size: 11))
-                                                Text(isShownOnMain ? "Shown on Main" : "Sub-menu Only")
-                                                    .font(.system(size: 10, weight: .medium))
-                                                    .foregroundColor(isShownOnMain ? .primary : .secondary)
+                            if !state.filterOnlyConflicts || !visibleCategoryItems.isEmpty {
+                                VStack(alignment: .leading, spacing: 10) {
+                                    // Category Header
+                                    HStack(spacing: 10) {
+                                        Text(category.uppercased())
+                                            .font(.system(size: 11, weight: .bold))
+                                            .foregroundColor(accent)
+
+                                        if state.selectedBundleID == "com.mitchellh.ghostty" {
+                                            let isShownOnMain = settings.isGhosttyCategoryShownOnMain(category)
+                                            Button(action: {
+                                                settings.toggleGhosttyCategoryOnMain(category)
+                                            }) {
+                                                HStack(spacing: 4) {
+                                                    Image(systemName: isShownOnMain ? "checkmark.circle.fill" : "circle")
+                                                        .foregroundColor(isShownOnMain ? Color.green : .secondary)
+                                                        .font(.system(size: 11))
+                                                    Text(isShownOnMain ? "Shown on Main" : "Sub-menu Only")
+                                                        .font(.system(size: 10, weight: .medium))
+                                                        .foregroundColor(isShownOnMain ? .primary : .secondary)
+                                                }
+                                                .padding(.horizontal, 6)
+                                                .padding(.vertical, 2)
+                                                .background(
+                                                    RoundedRectangle(cornerRadius: 4)
+                                                        .fill(isShownOnMain ? Color.green.opacity(0.12) : Color.white.opacity(0.06))
+                                                )
                                             }
-                                            .padding(.horizontal, 6)
-                                            .padding(.vertical, 2)
-                                            .background(
-                                                RoundedRectangle(cornerRadius: 4)
-                                                    .fill(isShownOnMain ? Color.green.opacity(0.12) : Color.white.opacity(0.06))
-                                            )
+                                            .buttonStyle(PlainButtonStyle())
+                                            .help("Toggle whether this category appears on Ghostty's main combined cheatsheet")
+                                        }
+
+                                        if hiddenManager.isCategoryHidden(bundleID: state.selectedBundleID, category: category) {
+                                            Text("HIDDEN IN HUD")
+                                                .font(.system(size: 9, weight: .bold))
+                                                .foregroundColor(.orange)
+                                                .padding(.horizontal, 5)
+                                                .padding(.vertical, 2)
+                                                .background(Color.orange.opacity(0.15))
+                                                .cornerRadius(4)
+                                        }
+
+                                        Spacer()
+
+                                        // Hide / Unhide Category from HUD Button
+                                        let isCatHidden = hiddenManager.isCategoryHidden(bundleID: state.selectedBundleID, category: category)
+                                        Button(action: {
+                                            hiddenManager.toggleCategoryHidden(bundleID: state.selectedBundleID, category: category)
+                                        }) {
+                                            Image(systemName: isCatHidden ? "eye.slash.fill" : "eye")
+                                                .font(.system(size: 11))
+                                                .foregroundColor(isCatHidden ? Color.orange : Color.secondary)
+                                                .padding(4)
                                         }
                                         .buttonStyle(PlainButtonStyle())
-                                        .help("Toggle whether this category appears on Ghostty's main combined cheatsheet")
+                                        .help(isCatHidden ? "Unhide this category in HUD" : "Hide this entire category/column from HUD")
+
+                                        Button(action: {
+                                            state.deleteCategory(name: category)
+                                        }) {
+                                            Image(systemName: "trash")
+                                                .font(.system(size: 11))
+                                                .foregroundColor(.secondary)
+                                                .padding(4)
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
+                                        .help("Delete Category")
                                     }
 
-                                    if hiddenManager.isCategoryHidden(bundleID: state.selectedBundleID, category: category) {
-                                        Text("HIDDEN IN HUD")
-                                            .font(.system(size: 9, weight: .bold))
-                                            .foregroundColor(.orange)
-                                            .padding(.horizontal, 5)
-                                            .padding(.vertical, 2)
-                                            .background(Color.orange.opacity(0.15))
-                                            .cornerRadius(4)
-                                    }
+                                    Divider()
 
-                                    Spacer()
-
-                                    // Hide / Unhide Category from HUD Button
-                                    let isCatHidden = hiddenManager.isCategoryHidden(bundleID: state.selectedBundleID, category: category)
-                                    Button(action: {
-                                        hiddenManager.toggleCategoryHidden(bundleID: state.selectedBundleID, category: category)
-                                    }) {
-                                        Image(systemName: isCatHidden ? "eye.slash.fill" : "eye")
-                                            .font(.system(size: 11))
-                                            .foregroundColor(isCatHidden ? Color.orange : Color.secondary)
-                                            .padding(4)
-                                    }
-                                    .buttonStyle(PlainButtonStyle())
-                                    .help(isCatHidden ? "Unhide this category in HUD" : "Hide this entire category/column from HUD")
-
-                                    Button(action: {
-                                        state.deleteCategory(name: category)
-                                    }) {
-                                        Image(systemName: "trash")
-                                            .font(.system(size: 11))
-                                            .foregroundColor(.secondary)
-                                            .padding(4)
-                                    }
-                                    .buttonStyle(PlainButtonStyle())
-                                    .help("Delete Category")
-                                }
-
-                                Divider()
-
-                                // Shortcuts List
-                                let items = state.shortcuts(for: category)
-                                ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                                    // Shortcuts List
+                                    ForEach(visibleCategoryItems, id: \.0) { index, item in
                                     let currentTitle = item["title"] ?? ""
                                     let currentKeys = item["keys"] ?? ""
 
@@ -3711,6 +4090,30 @@ struct KeybindingEditorView: View {
                                             }
                                         }
 
+                                        // Conflict Badges
+                                        let conflicts = ShortcutConflictDetector.shared.allConflicts(
+                                            for: currentKeys,
+                                            currentTitle: currentTitle,
+                                            inCategories: state.currentCategories,
+                                            shortcutsProvider: { state.shortcuts(for: $0) }
+                                        )
+
+                                        ForEach(Array(conflicts.enumerated()), id: \.offset) { _, conf in
+                                            HStack(spacing: 3) {
+                                                Image(systemName: conf.isGlobal ? "bolt.fill" : "exclamationmark.triangle.fill")
+                                                    .font(.system(size: 9, weight: .bold))
+                                                Text(conf.badgeText)
+                                                    .font(.system(size: 10, weight: .bold))
+                                                    .lineLimit(1)
+                                            }
+                                            .foregroundColor(conf.isGlobal ? Color.yellow : Color.orange)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 3)
+                                            .background(RoundedRectangle(cornerRadius: 4).fill((conf.isGlobal ? Color.yellow : Color.orange).opacity(0.14)))
+                                            .overlay(RoundedRectangle(cornerRadius: 4).stroke((conf.isGlobal ? Color.yellow : Color.orange).opacity(0.35), lineWidth: 0.8))
+                                            .help(conf.tooltip)
+                                        }
+
                                         // Hide / Unhide Shortcut Button
                                         let isItemHidden = hiddenManager.isItemHidden(bundleID: state.selectedBundleID, category: category, title: currentTitle)
                                         Button(action: {
@@ -3738,23 +4141,26 @@ struct KeybindingEditorView: View {
                                     }
                                 }
 
-                                // Add Shortcut row button
-                                Button(action: {
-                                    state.addShortcut(category: category)
-                                }) {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "plus")
-                                        Text("Add Shortcut")
+                                if !state.filterOnlyConflicts {
+                                    // Add Shortcut row button
+                                    Button(action: {
+                                        state.addShortcut(category: category)
+                                    }) {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "plus")
+                                            Text("Add Shortcut")
+                                        }
+                                        .font(.system(size: 12))
+                                        .foregroundColor(accent)
                                     }
-                                    .font(.system(size: 12))
-                                    .foregroundColor(accent)
+                                    .buttonStyle(PlainButtonStyle())
+                                    .padding(.top, 4)
                                 }
-                                .buttonStyle(PlainButtonStyle())
-                                .padding(.top, 4)
                             }
                             .padding(14)
                             .background(Color(NSColor.controlBackgroundColor))
                             .cornerRadius(10)
+                            }
                         }
                     }
                 }

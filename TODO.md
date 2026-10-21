@@ -141,6 +141,14 @@
   - [x] Press `Enter` or click to execute actions directly via Accessibility API (`AXUIElementPerformAction`).
   - [x] Configurable in Settings (During Search Only, Always, Shortcuts Only) and quick-toggle button in HUD header.
 
+- [x] **Hotkey Conflict Detection & Summary Banner**
+  - [x] Canonical normalization for duplicate shortcut matching across modifier permutations.
+  - [x] Internal app conflict detection (same shortcut assigned to multiple commands in the same app).
+  - [x] Global system collisions with AeroSpace tiling bindings, macOS System shortcuts, and KeyHUD hotkey.
+  - [x] Interactive Conflict Summary Banner at the top of the Keybinding Editor with total count, expandable collision breakdown, and one-click conflict isolation filter.
+  - [x] Real-time warning feedback banner in shortcut recorder pill while typing keys.
+  - [x] Visual warning badges with hover tooltips in Keybinding Editor rows and HUD cheatsheet rows.
+
 - [ ] **App Ignore / Blacklist**
   - [ ] Add an "Ignored Applications" list in Settings under General (e.g. for full-screen games, VMs, remote desktop/VNC).
   - [ ] Prevent `HotKeyManager` Command-hold/tap listeners from triggering the HUD when an ignored app is frontmost.
