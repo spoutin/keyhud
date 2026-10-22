@@ -171,28 +171,42 @@ class HUDWindowController: NSWindowController {
         let appName = validApp.localizedName ?? "Application"
         let icon = validApp.icon
 
-        let groups: [ShortcutGroup]
-        if bundleID == "com.mitchellh.ghostty" {
-            groups = CustomShortcutsManager.shared.groups(for: bundleID) ?? []
+        let customGroups = CustomShortcutsManager.shared.groups(for: bundleID)
+        let isGhostty = (bundleID == "com.mitchellh.ghostty")
+
+        let initialGroups: [ShortcutGroup]
+        if isGhostty {
+            initialGroups = customGroups ?? []
+        } else if let cached = MenuScanner.cached(for: bundleID), !cached.isEmpty {
+            initialGroups = (customGroups ?? []) + cached
         } else {
-            let scanned = MenuScanner.scan(app: validApp)
-            if let customGroups = CustomShortcutsManager.shared.groups(for: bundleID) {
-                groups = customGroups + scanned
-            } else {
-                groups = scanned
-            }
+            initialGroups = customGroups ?? []
         }
 
         viewModel.appName = appName
         viewModel.bundleID = bundleID
         viewModel.appIcon = icon
-        viewModel.groups = groups
+        viewModel.groups = initialGroups
 
-        applyScreenPercentageFrame(groups: groups)
+        applyScreenPercentageFrame(groups: initialGroups)
         AppSettings.shared.updateWindowsAppearance()
 
         window.orderFrontRegardless()
         window.makeKeyAndOrderFront(nil)
+
+        // If not yet cached and not Ghostty, scan asynchronously in background and populate
+        if !isGhostty && MenuScanner.cached(for: bundleID) == nil {
+            DispatchQueue.global(qos: .userInitiated).async { [weak self, weak validApp] in
+                guard let app = validApp else { return }
+                let scanned = MenuScanner.scan(app: app)
+                DispatchQueue.main.async {
+                    guard let self = self, self.currentTargetApp?.bundleIdentifier == bundleID else { return }
+                    let fullGroups = (customGroups ?? []) + scanned
+                    self.viewModel.groups = fullGroups
+                    self.applyScreenPercentageFrame(groups: fullGroups)
+                }
+            }
+        }
 
         if let monitor = eventMonitor {
             NSEvent.removeMonitor(monitor)

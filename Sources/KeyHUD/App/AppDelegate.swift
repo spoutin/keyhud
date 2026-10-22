@@ -57,6 +57,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             AXIsProcessTrustedWithOptions(options)
         }
 
+        // Pre-warm menu bar cache when user switches apps so HUD toggle is instant
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: nil
+        ) { notification in
+            if let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+               app.bundleIdentifier != Bundle.main.bundleIdentifier {
+                MenuScanner.prewarm(app: app)
+            }
+        }
+        if let frontApp = NSWorkspace.shared.frontmostApplication {
+            MenuScanner.prewarm(app: frontApp)
+        }
+
         HotKeyManager.shared.start()
     }
 

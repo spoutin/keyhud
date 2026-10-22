@@ -84,15 +84,19 @@ class HotKeyManager {
     }
 
     func cancelCmdHold() {
+        guard isCmdCurrentlyDown else { return }
         cmdWorkItem?.cancel()
         cmdWorkItem = nil
         shouldIgnoreNextCmdUp = true
+        consecutiveTapCount = 0
+        lastCmdUpTime = nil
     }
 
     private func handleFlagsChanged(_ event: NSEvent) {
         if EditorState.shared.isRecording { return }
-        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        let isOnlyCmd = flags == .command
+        let relevantModifiers: NSEvent.ModifierFlags = [.command, .option, .control, .shift, .function]
+        let activeMods = event.modifierFlags.intersection(relevantModifiers)
+        let isOnlyCmd = activeMods == .command
 
         if isOnlyCmd {
             if !isCmdCurrentlyDown {
@@ -102,7 +106,15 @@ class HotKeyManager {
         } else {
             if isCmdCurrentlyDown {
                 isCmdCurrentlyDown = false
-                onCmdUp()
+                if activeMods.isEmpty {
+                    onCmdUp()
+                } else {
+                    // Another modifier (Shift, Option, Control) was engaged while Command was down.
+                    // This is a multi-modifier combo, not a pure Command tap.
+                    shouldIgnoreNextCmdUp = false
+                    consecutiveTapCount = 0
+                    lastCmdUpTime = nil
+                }
             }
             cmdWorkItem?.cancel()
             cmdWorkItem = nil

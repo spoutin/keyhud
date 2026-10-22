@@ -5,9 +5,38 @@ import AppKit
 
 class MenuScanner {
     private static var menuCache: [String: [ShortcutGroup]] = [:]
+    private static let cacheLock = NSLock()
+    private static var isScanning = Set<String>()
+
+    static func cached(for bundleID: String) -> [ShortcutGroup]? {
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+        return menuCache[bundleID]
+    }
 
     static func invalidate(bundleID: String) {
+        cacheLock.lock()
         menuCache.removeValue(forKey: bundleID)
+        cacheLock.unlock()
+    }
+
+    static func prewarm(app: NSRunningApplication) {
+        let bID = app.bundleIdentifier ?? "\(app.processIdentifier)"
+        if bID == Bundle.main.bundleIdentifier || bID == "com.mitchellh.ghostty" { return }
+        cacheLock.lock()
+        if menuCache[bID] != nil || isScanning.contains(bID) {
+            cacheLock.unlock()
+            return
+        }
+        isScanning.insert(bID)
+        cacheLock.unlock()
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            _ = scan(app: app)
+            cacheLock.lock()
+            isScanning.remove(bID)
+            cacheLock.unlock()
+        }
     }
 
     static func decodeModifiers(_ mod: Int) -> String {
@@ -73,9 +102,12 @@ class MenuScanner {
 
     static func scan(app: NSRunningApplication) -> [ShortcutGroup] {
         let bID = app.bundleIdentifier ?? "\(app.processIdentifier)"
+        cacheLock.lock()
         if let cached = menuCache[bID], !cached.isEmpty {
+            cacheLock.unlock()
             return cached
         }
+        cacheLock.unlock()
 
         let axApp = AXUIElementCreateApplication(app.processIdentifier)
         var menuBarVal: AnyObject?
@@ -104,7 +136,9 @@ class MenuScanner {
                 groups.append(ShortcutGroup(title: title, items: items))
             }
         }
+        cacheLock.lock()
         menuCache[bID] = groups
+        cacheLock.unlock()
         return groups
     }
 }
