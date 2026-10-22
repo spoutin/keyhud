@@ -635,6 +635,56 @@ struct SettingsView: View {
                 .background(Color(NSColor.controlBackgroundColor))
                 .cornerRadius(10)
 
+                // What's New & Release Highlights Card
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("WHAT'S NEW IN V\(ReleaseNotes.currentVersion)")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.secondary)
+
+                        Spacer()
+
+                        Button("View Release Window...") {
+                            WhatsNewWindowController.shared.show()
+                        }
+                        .font(.system(size: 11))
+                    }
+
+                    Text(ReleaseNotes.summary)
+                        .font(.system(size: 12))
+                        .foregroundColor(.primary)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(ReleaseNotes.sections) { section in
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: section.icon)
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundColor(settings.currentAccentColor)
+                                    Text(section.category)
+                                        .font(.system(size: 11, weight: .bold))
+                                        .foregroundColor(.secondary)
+                                }
+
+                                ForEach(section.items, id: \.self) { item in
+                                    HStack(alignment: .top, spacing: 6) {
+                                        Text("•")
+                                            .foregroundColor(.secondary)
+                                            .font(.system(size: 11))
+                                        Text(item)
+                                            .font(.system(size: 11))
+                                            .foregroundColor(.primary.opacity(0.85))
+                                    }
+                                }
+                            }
+                            .padding(.leading, 8)
+                        }
+                    }
+                }
+                .padding(14)
+                .background(Color(NSColor.controlBackgroundColor))
+                .cornerRadius(8)
+
                 // Publisher & Open Source Card
                 VStack(alignment: .leading, spacing: 12) {
                     Text("PUBLISHER & PROJECT")

@@ -47,6 +47,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(NSMenuItem(title: "Auto-Detect from Local Configs", action: #selector(autoDetectAction), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Open Shortcuts JSON...", action: #selector(openConfig), keyEquivalent: ""))
         menu.addItem(NSMenuItem.separator())
+        menu.addItem(NSMenuItem(title: "What's New in KeyHUD...", action: #selector(openWhatsNew), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "About KeyHUD...", action: #selector(openAbout), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Quit KeyHUD", action: #selector(quitApp), keyEquivalent: "q"))
 
@@ -73,6 +74,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         HotKeyManager.shared.start()
+        checkWhatsNewOnLaunch()
     }
 
     func menuWillOpen(_ menu: NSMenu) {
@@ -149,6 +151,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc func openAbout() {
         SettingsWindowController.shared.openSettings(selectingTab: .about)
+    }
+
+    @objc func openWhatsNew() {
+        WhatsNewWindowController.shared.show()
+    }
+
+    private func checkWhatsNewOnLaunch() {
+        let key = "LastSeenWhatsNewVersion"
+        let lastSeen = UserDefaults.standard.string(forKey: key)
+        let current = AppInfo.version
+        if lastSeen != current {
+            UserDefaults.standard.set(current, forKey: key)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                WhatsNewWindowController.shared.show()
+            }
+        }
     }
 
     @objc func openConfig() {
