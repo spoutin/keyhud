@@ -7,8 +7,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var statusItem: NSStatusItem?
     var toggleMenuItem: NSMenuItem?
 
+    var activityToken: NSObjectProtocol?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppDelegate.shared = self
+        
+        // Prevent macOS App Nap from aggressively sleeping the background hotkey listener
+        activityToken = ProcessInfo.processInfo.beginActivity(
+            options: [.userInitiated, .latencyCritical],
+            reason: "Global Hotkey Listener"
+        )
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem?.button {

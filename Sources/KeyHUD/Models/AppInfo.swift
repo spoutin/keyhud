@@ -4,7 +4,7 @@ import Foundation
 
 struct AppInfo {
     static var version: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.1-beta.12"
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.1-beta.13"
     }
 
     static var build: String {
