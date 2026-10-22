@@ -28,6 +28,7 @@ class EditorState: ObservableObject {
     @Published var config: [String: [String: [[String: String]]]] = [:]
     private var savedConfig: [String: [String: [[String: String]]]] = [:]
     private var undoStack: [[String: [String: [[String: String]]]]] = []
+    @Published var isUserModified: Bool = false
 
     @Published var selectedBundleID: String = "" {
         didSet {
@@ -148,7 +149,7 @@ class EditorState: ObservableObject {
     }
 
     var isDirty: Bool {
-        config != savedConfig
+        isUserModified && (config != savedConfig)
     }
 
     var canUndo: Bool {
@@ -157,11 +158,15 @@ class EditorState: ObservableObject {
 
     func recordUndo() {
         undoStack.append(config)
+        isUserModified = true
     }
 
     func undo() {
         guard let prev = undoStack.popLast() else { return }
         config = prev
+        if config == savedConfig || undoStack.isEmpty {
+            isUserModified = false
+        }
         recalculateConflicts()
     }
 
@@ -185,17 +190,18 @@ class EditorState: ObservableObject {
         autoDetectIfEmpty(for: self.selectedBundleID)
         self.savedConfig = self.config
         self.undoStack.removeAll()
+        self.isUserModified = false
         recalculateConflicts()
     }
 
     func autoDetectIfEmpty(for bundleID: String) {
         guard !bundleID.isEmpty else { return }
         if config[bundleID] == nil || config[bundleID]?.isEmpty == true {
-            autoDetectFromRunningApp(bundleID: bundleID)
+            autoDetectFromRunningApp(bundleID: bundleID, isUserInitiated: false)
         }
     }
 
-    func autoDetectFromRunningApp(bundleID: String) {
+    func autoDetectFromRunningApp(bundleID: String, isUserInitiated: Bool = false) {
         guard !bundleID.isEmpty else { return }
         if let runningApp = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == bundleID }) {
             let scanned = MenuScanner.scan(app: runningApp)
@@ -204,7 +210,14 @@ class EditorState: ObservableObject {
                 for group in scanned {
                     appDict[group.title] = group.items.map { ["title": $0.title, "keys": $0.keys] }
                 }
+                if isUserInitiated {
+                    recordUndo()
+                }
                 config[bundleID] = appDict
+                if !isUserInitiated {
+                    // Establishing baseline view for newly selected app: keep savedConfig in sync
+                    savedConfig[bundleID] = appDict
+                }
                 recalculateConflicts()
             }
         }
@@ -404,6 +417,7 @@ class EditorState: ObservableObject {
             try CustomShortcutsManager.shared.saveConfig(config)
             savedConfig = config
             undoStack.removeAll()
+            isUserModified = false
         } catch {
             print("Error saving shortcuts config: \(error)")
         }

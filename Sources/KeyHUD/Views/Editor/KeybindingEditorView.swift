@@ -30,8 +30,7 @@ struct KeybindingEditorView: View {
                     .frame(minWidth: 200)
 
                     Button(action: {
-                        state.recordUndo()
-                        state.autoDetectFromRunningApp(bundleID: state.selectedBundleID)
+                        state.autoDetectFromRunningApp(bundleID: state.selectedBundleID, isUserInitiated: true)
                     }) {
                         Image(systemName: "arrow.clockwise")
                             .font(.system(size: 13))
