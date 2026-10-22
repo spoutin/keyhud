@@ -116,6 +116,22 @@ enum ConflictSeverity: Equatable {
     case globalAeroSpace(action: String)
     case globalMacOS(action: String)
     case globalKeyHUD
+    case standardConvention(action: String)
+    case overriddenStandard(action: String)
+
+    var isWarning: Bool {
+        switch self {
+        case .standardConvention: return false
+        default: return true
+        }
+    }
+
+    var isBenignConvention: Bool {
+        switch self {
+        case .standardConvention: return true
+        default: return false
+        }
+    }
 
     var badgeText: String {
         switch self {
@@ -127,6 +143,10 @@ enum ConflictSeverity: Equatable {
             return "Global: macOS (\(act))"
         case .globalKeyHUD:
             return "Global: KeyHUD Hotkey"
+        case .standardConvention(let act):
+            return "macOS: \(act)"
+        case .overriddenStandard(let act):
+            return "Overrides: macOS (\(act))"
         }
     }
 
@@ -140,6 +160,10 @@ enum ConflictSeverity: Equatable {
             return "System Conflict: Collides with macOS System shortcut '\(act)'"
         case .globalKeyHUD:
             return "System Conflict: Collides with KeyHUD toggle hotkey (⌘⇧/)"
+        case .standardConvention(let act):
+            return "Standard macOS convention: Matches default '\(act)' behavior"
+        case .overriddenStandard(let act):
+            return "Warning: Overrides standard macOS shortcut '\(act)' for a different function"
         }
     }
 
@@ -196,9 +220,32 @@ struct ToolDomainHelper {
     static func areBindingsInConflict(a: MappedKeybinding, b: MappedKeybinding, bundleID: String) -> Bool {
         if a.id == b.id { return false }
 
-        // Global collisions (AeroSpace / macOS) intercept everywhere
-        if a.appScope == "AeroSpace" || b.appScope == "AeroSpace" ||
-           a.appScope == "macOS" || b.appScope == "macOS" {
+        // If one binding is from macOS and the other from an app, check if they share the same standard convention
+        let isAMacOS = a.appScope == "macOS"
+        let isBMacOS = b.appScope == "macOS"
+        if isAMacOS != isBMacOS {
+            let appBinding = isAMacOS ? b : a
+            let macBinding = isAMacOS ? a : b
+            let appTitle = appBinding.shortcut.title.lowercased()
+            let macTitle = macBinding.shortcut.title.lowercased()
+
+            // Conforming standard AppKit actions do not conflict
+            if (macTitle.contains("hide") && appTitle.contains("hide")) ||
+               (macTitle.contains("quit") && (appTitle.contains("quit") || appTitle.contains("exit"))) ||
+               (macTitle.contains("close") && appTitle.contains("close")) ||
+               (macTitle.contains("minimize") && appTitle.contains("minimi")) ||
+               (macTitle.contains("undo") && appTitle.contains("undo")) ||
+               (macTitle.contains("redo") && appTitle.contains("redo")) ||
+               (macTitle.contains("copy") && appTitle.contains("copy")) ||
+               (macTitle.contains("paste") && appTitle.contains("paste")) ||
+               (macTitle.contains("settings") && (appTitle.contains("setting") || appTitle.contains("preference"))) {
+                return false
+            }
+            return true
+        }
+
+        // Global collisions (AeroSpace) intercept everywhere
+        if a.appScope == "AeroSpace" || b.appScope == "AeroSpace" {
             return true
         }
 
@@ -210,54 +257,105 @@ struct ToolDomainHelper {
     }
 }
 
+struct StandardAppConvention {
+    let canonicalKey: String
+    let actionName: String
+    let keywords: [String]
+}
+
 class ShortcutConflictDetector {
     static let shared = ShortcutConflictDetector()
 
-    private var globalCache: [String: ConflictSeverity] = [:]
+    private var daemonCache: [String: ConflictSeverity] = [:]
+    private var conventionsCache: [String: StandardAppConvention] = [:]
 
     init() {
         refreshGlobalShortcuts()
     }
 
     func refreshGlobalShortcuts() {
-        var map: [String: ConflictSeverity] = [:]
+        var daemons: [String: ConflictSeverity] = [:]
+        var conventions: [String: StandardAppConvention] = [:]
 
         // 1. AeroSpace bindings (only main mode represents active global hotkeys)
         for grp in AeroSpaceConfigParser.parse(onlyMainMode: true) {
             for item in grp.items {
                 for v in ShortcutNormalizer.variants(item.keys) {
                     let canon = ShortcutNormalizer.canonical(v)
-                    if !canon.isEmpty && map[canon] == nil {
-                        map[canon] = .globalAeroSpace(action: item.title)
+                    if !canon.isEmpty && daemons[canon] == nil {
+                        daemons[canon] = .globalAeroSpace(action: item.title)
                     }
                 }
             }
         }
 
-        // 2. macOS System shortcuts
+        // 2. Standard App Conventions (AppKit HIG menu commands)
+        let conventionList: [StandardAppConvention] = [
+            StandardAppConvention(canonicalKey: "⌘h",  actionName: "Hide Application",        keywords: ["hide"]),
+            StandardAppConvention(canonicalKey: "⌥⌘h", actionName: "Hide Others",             keywords: ["hide other", "hide others"]),
+            StandardAppConvention(canonicalKey: "⌘q",  actionName: "Quit Application",        keywords: ["quit", "exit"]),
+            StandardAppConvention(canonicalKey: "⌘w",  actionName: "Close Window",            keywords: ["close"]),
+            StandardAppConvention(canonicalKey: "⌘m",  actionName: "Minimize Window",        keywords: ["minimize", "minimise"]),
+            StandardAppConvention(canonicalKey: "⌘`",  actionName: "Cycle Windows",           keywords: ["cycle window", "switch window", "next window", "window"]),
+            StandardAppConvention(canonicalKey: "⌘z",  actionName: "Undo",                    keywords: ["undo"]),
+            StandardAppConvention(canonicalKey: "⇧⌘z", actionName: "Redo",                    keywords: ["redo"]),
+            StandardAppConvention(canonicalKey: "⌘,",  actionName: "Preferences / Settings",  keywords: ["setting", "preference", "option"]),
+            StandardAppConvention(canonicalKey: "⌘c",  actionName: "Copy",                    keywords: ["copy"]),
+            StandardAppConvention(canonicalKey: "⌘v",  actionName: "Paste",                   keywords: ["paste"]),
+            StandardAppConvention(canonicalKey: "⌘x",  actionName: "Cut",                     keywords: ["cut"]),
+            StandardAppConvention(canonicalKey: "⌘a",  actionName: "Select All",              keywords: ["select all"])
+        ]
+        for conv in conventionList {
+            let canon = ShortcutNormalizer.canonical(conv.canonicalKey)
+            conventions[canon] = conv
+        }
+
+        // 3. macOS True Daemon Intercepts (System daemon hotkeys)
         for grp in MacOSGlobalShortcuts.getGroups() {
+            if grp.title == "Window & App Management" {
+                continue
+            }
             for item in grp.items {
                 for v in ShortcutNormalizer.variants(item.keys) {
                     let canon = ShortcutNormalizer.canonical(v)
-                    if !canon.isEmpty && map[canon] == nil {
-                        map[canon] = .globalMacOS(action: item.title)
+                    if !canon.isEmpty && daemons[canon] == nil {
+                        daemons[canon] = .globalMacOS(action: item.title)
                     }
                 }
             }
         }
 
-        // 3. KeyHUD activation hotkey
-        map[ShortcutNormalizer.canonical("⌘⇧/")] = .globalKeyHUD
-        map[ShortcutNormalizer.canonical("⌘⇧?")] = .globalKeyHUD
+        // 4. KeyHUD activation hotkey
+        daemons[ShortcutNormalizer.canonical("⌘⇧/")] = .globalKeyHUD
+        daemons[ShortcutNormalizer.canonical("⌘⇧?")] = .globalKeyHUD
 
-        self.globalCache = map
+        self.daemonCache = daemons
+        self.conventionsCache = conventions
     }
 
-    func checkGlobalConflict(keys: String) -> ConflictSeverity? {
+    func checkGlobalConflict(keys: String, title: String) -> ConflictSeverity? {
+        let titleLower = title.lowercased()
+
         for v in ShortcutNormalizer.variants(keys) {
             let canon = ShortcutNormalizer.canonical(v)
-            if let conflict = globalCache[canon] {
-                return conflict
+            if canon.isEmpty { continue }
+
+            // 1. Hard OS daemon intercept (Spotlight, Screenshots, AeroSpace, etc.)
+            if let daemonConflict = daemonCache[canon] {
+                return daemonConflict
+            }
+
+            // 2. Standard AppKit convention
+            if let conv = conventionsCache[canon] {
+                let matchesIntent = conv.keywords.contains { kw in
+                    titleLower.contains(kw)
+                }
+
+                if matchesIntent {
+                    return .standardConvention(action: conv.actionName)
+                } else {
+                    return .overriddenStandard(action: conv.actionName)
+                }
             }
         }
         return nil
@@ -316,8 +414,12 @@ class ShortcutConflictDetector {
         ) {
             results.append(internalConf)
         }
-        if let globalConf = checkGlobalConflict(keys: keys) {
-            results.append(globalConf)
+
+        let isSystemBundle = bundleID == "com.apple.systempreferences" || bundleID == "global" || bundleID == "macos"
+        if !isSystemBundle {
+            if let globalConf = checkGlobalConflict(keys: keys, title: currentTitle) {
+                results.append(globalConf)
+            }
         }
         return results
     }

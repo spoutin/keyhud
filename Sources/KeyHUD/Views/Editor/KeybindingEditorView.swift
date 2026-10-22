@@ -247,7 +247,7 @@ struct KeybindingEditorView: View {
                                 let t = item["title"] ?? ""
                                 guard !k.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
                                 let confs = state.conflicts(category: category, title: t, keys: k)
-                                return confs.isEmpty ? nil : (idx, item)
+                                return confs.contains(where: { $0.isWarning }) ? (idx, item) : nil
                             }
 
                             if !state.filterOnlyConflicts || !visibleCategoryItems.isEmpty {
@@ -454,18 +454,22 @@ struct KeybindingEditorView: View {
                                         let conflicts = state.conflicts(category: category, title: currentTitle, keys: currentKeys)
 
                                         ForEach(Array(conflicts.enumerated()), id: \.offset) { _, conf in
+                                            let isBenign = conf.isBenignConvention
+                                            let badgeColor: Color = isBenign ? Color.blue : (conf.isGlobal ? Color.yellow : Color.orange)
+                                            let iconName: String = isBenign ? "apple.logo" : (conf.isGlobal ? "bolt.fill" : "exclamationmark.triangle.fill")
+
                                             HStack(spacing: 3) {
-                                                Image(systemName: conf.isGlobal ? "bolt.fill" : "exclamationmark.triangle.fill")
+                                                Image(systemName: iconName)
                                                     .font(.system(size: 9, weight: .bold))
                                                 Text(conf.badgeText)
                                                     .font(.system(size: 10, weight: .bold))
                                                     .lineLimit(1)
                                             }
-                                            .foregroundColor(conf.isGlobal ? Color.yellow : Color.orange)
+                                            .foregroundColor(badgeColor)
                                             .padding(.horizontal, 6)
                                             .padding(.vertical, 3)
-                                            .background(RoundedRectangle(cornerRadius: 4).fill((conf.isGlobal ? Color.yellow : Color.orange).opacity(0.14)))
-                                            .overlay(RoundedRectangle(cornerRadius: 4).stroke((conf.isGlobal ? Color.yellow : Color.orange).opacity(0.35), lineWidth: 0.8))
+                                            .background(RoundedRectangle(cornerRadius: 4).fill(badgeColor.opacity(0.14)))
+                                            .overlay(RoundedRectangle(cornerRadius: 4).stroke(badgeColor.opacity(0.35), lineWidth: 0.8))
                                             .help(conf.tooltip)
                                         }
 

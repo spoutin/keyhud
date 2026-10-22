@@ -309,7 +309,7 @@ class EditorState: ObservableObject {
     }
 
     func totalConflictsCount() -> Int {
-        return cachedConflictSummaries.count
+        return cachedConflictSummaries.filter { $0.conflicts.contains(where: { $0.isWarning }) }.count
     }
 
     func addApp(bundleID: String) {

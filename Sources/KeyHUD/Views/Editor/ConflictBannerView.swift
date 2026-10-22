@@ -8,10 +8,11 @@ struct ConflictSummaryBannerView: View {
     let accent: Color
 
     var body: some View {
-        let conflicts = state.allConflictSummaries()
-        if !conflicts.isEmpty {
-            let internalCount = conflicts.filter { $0.conflicts.contains(where: { !$0.isGlobal }) }.count
-            let globalCount = conflicts.filter { $0.conflicts.contains(where: { $0.isGlobal }) }.count
+        let allConflicts = state.allConflictSummaries()
+        let warningItems = allConflicts.filter { $0.conflicts.contains(where: { $0.isWarning }) }
+        if !warningItems.isEmpty {
+            let internalCount = warningItems.filter { $0.conflicts.contains(where: { !$0.isGlobal }) }.count
+            let globalCount = warningItems.filter { $0.conflicts.contains(where: { $0.isGlobal && $0.isWarning }) }.count
 
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .center, spacing: 10) {
@@ -20,7 +21,7 @@ struct ConflictSummaryBannerView: View {
                         .foregroundColor(Color.orange)
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("\(conflicts.count) Hotkey Collision\(conflicts.count == 1 ? "" : "s") Detected")
+                        Text("\(warningItems.count) Hotkey Collision\(warningItems.count == 1 ? "" : "s") Detected")
                             .font(.system(size: 13, weight: .bold))
                             .foregroundColor(Color.orange)
 
@@ -38,7 +39,7 @@ struct ConflictSummaryBannerView: View {
                         }
                     }) {
                         HStack(spacing: 4) {
-                            Text(state.isConflictDetailsExpanded ? "Hide Details" : "View Details (\(conflicts.count))")
+                            Text(state.isConflictDetailsExpanded ? "Hide Details" : "View Details (\(warningItems.count))")
                                 .font(.system(size: 11, weight: .semibold))
                             Image(systemName: state.isConflictDetailsExpanded ? "chevron.up" : "chevron.down")
                                 .font(.system(size: 9, weight: .bold))
@@ -76,7 +77,7 @@ struct ConflictSummaryBannerView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Divider().background(Color.orange.opacity(0.3))
 
-                        ForEach(conflicts) { item in
+                        ForEach(warningItems) { item in
                             HStack(alignment: .center, spacing: 8) {
                                 // Key Badges
                                 let tokens = KeyTokenParser.parse(item.keys)
@@ -103,7 +104,8 @@ struct ConflictSummaryBannerView: View {
                                     .font(.system(size: 9))
                                     .foregroundColor(.secondary)
 
-                                ForEach(Array(item.conflicts.enumerated()), id: \.offset) { _, conf in
+                                let itemWarnings = item.conflicts.filter { $0.isWarning }
+                                ForEach(Array(itemWarnings.enumerated()), id: \.offset) { _, conf in
                                     Text(conf.badgeText)
                                         .font(.system(size: 11, weight: .semibold))
                                         .foregroundColor(conf.isGlobal ? Color.yellow : Color.orange)
